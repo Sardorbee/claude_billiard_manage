@@ -11,8 +11,9 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  }
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

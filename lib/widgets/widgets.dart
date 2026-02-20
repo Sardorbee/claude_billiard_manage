@@ -280,9 +280,9 @@ class StatCard extends StatelessWidget {
               value,
               style: TextStyle(
                 color: valueColor ?? AppTheme.textPrimary,
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+                // letterSpacing: -0.5,
               ),
             ),
         ],

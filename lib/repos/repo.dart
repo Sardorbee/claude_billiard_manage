@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
@@ -108,7 +109,10 @@ class TableRepository {
 
 class SessionRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
+  final FirebaseDatabase _rtdb = FirebaseDatabase.instanceFor(
+    app: Firebase.app(),
+    databaseURL: 'https://billiard-manage-default-rtdb.asia-southeast1.firebasedatabase.app',
+  );
 
   // RTDB: live session state (timer + status)
   DatabaseReference _liveRef(String venueId, String tableId) =>
