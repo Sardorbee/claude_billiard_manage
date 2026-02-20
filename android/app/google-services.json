@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "703178842530",
+    "project_id": "billiard-manage",
+    "storage_bucket": "billiard-manage.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:703178842530:android:bf07f5abdad6746e6012fb",
+        "android_client_info": {
+          "package_name": "com.example.billiardtm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7aePxam_I692XzJNKZq503JAbNGfS6JM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
