@@ -114,6 +114,8 @@ class SessionRepository {
     databaseURL: 'https://billiard-manage-default-rtdb.asia-southeast1.firebasedatabase.app',
   );
 
+
+
   // RTDB: live session state (timer + status)
   DatabaseReference _liveRef(String venueId, String tableId) =>
       _rtdb.ref('venues/$venueId/sessions/$tableId');
@@ -200,6 +202,16 @@ class SessionRepository {
     }
     await _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
         .update({'orderItems': existing.map((e) => e.toMap()).toList()});
+  }
+
+  Stream<SessionModel?> watchActiveSession(String venueId, String sessionId) {
+    return _db
+        .collection('venues')
+        .doc(venueId)
+        .collection('sessions')
+        .doc(sessionId)
+        .snapshots()
+        .map((doc) => doc.exists ? SessionModel.fromFirestore(doc) : null);
   }
 
   Future<void> transferSession(String venueId, String sessionId, String fromTableId, String toTableId, String toTableName) async {

@@ -1,6 +1,6 @@
-import 'package:billiardtm/app_theme.dart';
 import 'package:flutter/material.dart';
 import '../models/models.dart';
+import '../theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
 // ─── STATUS BADGE ────────────────────────────────────────────────────────────
@@ -280,9 +280,9 @@ class StatCard extends StatelessWidget {
               value,
               style: TextStyle(
                 color: valueColor ?? AppTheme.textPrimary,
-                fontSize: 20,
+                fontSize: 24,
                 fontWeight: FontWeight.w800,
-                // letterSpacing: -0.5,
+                letterSpacing: -0.5,
               ),
             ),
         ],

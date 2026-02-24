@@ -1,9 +1,9 @@
-import 'package:billiardtm/app_theme.dart';
-import 'package:billiardtm/bloc/blocs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:table_calendar/table_calendar.dart';
+import '../../blocs/blocs.dart';
 import '../../models/models.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
 import 'package:intl/intl.dart';
 

@@ -2,7 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 // ─── TABLE ───────────────────────────────────────────────────────────────────
 
-enum TableType { pool, snooker, vipSuite }
+enum TableType { billiard, ps }
+
 enum TableStatus { open, active, reserved, maintenance }
 
 class TableModel {
@@ -38,7 +39,7 @@ class TableModel {
       zone: d['zone'] ?? '',
       type: TableType.values.firstWhere(
         (e) => e.name == (d['type'] ?? 'pool'),
-        orElse: () => TableType.pool,
+        orElse: () => TableType.billiard,
       ),
       status: TableStatus.values.firstWhere(
         (e) => e.name == (d['status'] ?? 'open'),
@@ -53,29 +54,41 @@ class TableModel {
   }
 
   Map<String, dynamic> toFirestore() => {
-    'name': name,
-    'zone': zone,
-    'type': type.name,
-    'status': status.name,
-    'hourlyRate': hourlyRate,
-    'capacity': capacity,
-    'currentSessionId': currentSessionId,
-    'reservationId': reservationId,
-    'isActive': isActive,
-  };
+        'name': name,
+        'zone': zone,
+        'type': type.name,
+        'status': status.name,
+        'hourlyRate': hourlyRate,
+        'capacity': capacity,
+        'currentSessionId': currentSessionId,
+        'reservationId': reservationId,
+        'isActive': isActive,
+      };
 
   TableModel copyWith({
-    String? id, String? name, String? zone, TableType? type,
-    TableStatus? status, double? hourlyRate, int? capacity,
-    String? currentSessionId, String? reservationId, bool? isActive,
-  }) => TableModel(
-    id: id ?? this.id, name: name ?? this.name, zone: zone ?? this.zone,
-    type: type ?? this.type, status: status ?? this.status,
-    hourlyRate: hourlyRate ?? this.hourlyRate, capacity: capacity ?? this.capacity,
-    currentSessionId: currentSessionId ?? this.currentSessionId,
-    reservationId: reservationId ?? this.reservationId,
-    isActive: isActive ?? this.isActive,
-  );
+    String? id,
+    String? name,
+    String? zone,
+    TableType? type,
+    TableStatus? status,
+    double? hourlyRate,
+    int? capacity,
+    String? currentSessionId,
+    String? reservationId,
+    bool? isActive,
+  }) =>
+      TableModel(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        zone: zone ?? this.zone,
+        type: type ?? this.type,
+        status: status ?? this.status,
+        hourlyRate: hourlyRate ?? this.hourlyRate,
+        capacity: capacity ?? this.capacity,
+        currentSessionId: currentSessionId ?? this.currentSessionId,
+        reservationId: reservationId ?? this.reservationId,
+        isActive: isActive ?? this.isActive,
+      );
 }
 
 // ─── SESSION ─────────────────────────────────────────────────────────────────
@@ -141,8 +154,10 @@ class SessionModel {
       tableId: d['tableId'] ?? '',
       tableName: d['tableName'] ?? '',
       startedAt: (d['startedAt'] as Timestamp).toDate(),
-      endedAt: d['endedAt'] != null ? (d['endedAt'] as Timestamp).toDate() : null,
-      pausedAt: d['pausedAt'] != null ? (d['pausedAt'] as Timestamp).toDate() : null,
+      endedAt:
+          d['endedAt'] != null ? (d['endedAt'] as Timestamp).toDate() : null,
+      pausedAt:
+          d['pausedAt'] != null ? (d['pausedAt'] as Timestamp).toDate() : null,
       totalPausedSeconds: d['totalPausedSeconds'] ?? 0,
       guestCount: d['guestCount'] ?? 1,
       hourlyRate: (d['hourlyRate'] ?? 0.0).toDouble(),
@@ -158,38 +173,56 @@ class SessionModel {
   }
 
   Map<String, dynamic> toFirestore() => {
-    'tableId': tableId,
-    'tableName': tableName,
-    'startedAt': Timestamp.fromDate(startedAt),
-    'endedAt': endedAt != null ? Timestamp.fromDate(endedAt!) : null,
-    'pausedAt': pausedAt != null ? Timestamp.fromDate(pausedAt!) : null,
-    'totalPausedSeconds': totalPausedSeconds,
-    'guestCount': guestCount,
-    'hourlyRate': hourlyRate,
-    'orderItems': orderItems.map((e) => e.toMap()).toList(),
-    'discount': discount,
-    'notes': notes,
-    'status': status,
-    'openedBy': openedBy,
-    'venueId': venueId,
-  };
+        'tableId': tableId,
+        'tableName': tableName,
+        'startedAt': Timestamp.fromDate(startedAt),
+        'endedAt': endedAt != null ? Timestamp.fromDate(endedAt!) : null,
+        'pausedAt': pausedAt != null ? Timestamp.fromDate(pausedAt!) : null,
+        'totalPausedSeconds': totalPausedSeconds,
+        'guestCount': guestCount,
+        'hourlyRate': hourlyRate,
+        'orderItems': orderItems.map((e) => e.toMap()).toList(),
+        'discount': discount,
+        'notes': notes,
+        'status': status,
+        'openedBy': openedBy,
+        'venueId': venueId,
+      };
 
   SessionModel copyWith({
-    String? id, String? tableId, String? tableName,
-    DateTime? startedAt, DateTime? endedAt, DateTime? pausedAt,
-    int? totalPausedSeconds, int? guestCount, double? hourlyRate,
-    List<OrderItem>? orderItems, double? discount, String? notes,
-    String? status, String? openedBy, String? venueId,
-  }) => SessionModel(
-    id: id ?? this.id, tableId: tableId ?? this.tableId,
-    tableName: tableName ?? this.tableName, startedAt: startedAt ?? this.startedAt,
-    endedAt: endedAt ?? this.endedAt, pausedAt: pausedAt ?? this.pausedAt,
-    totalPausedSeconds: totalPausedSeconds ?? this.totalPausedSeconds,
-    guestCount: guestCount ?? this.guestCount, hourlyRate: hourlyRate ?? this.hourlyRate,
-    orderItems: orderItems ?? this.orderItems, discount: discount ?? this.discount,
-    notes: notes ?? this.notes, status: status ?? this.status,
-    openedBy: openedBy ?? this.openedBy, venueId: venueId ?? this.venueId,
-  );
+    String? id,
+    String? tableId,
+    String? tableName,
+    DateTime? startedAt,
+    DateTime? endedAt,
+    DateTime? pausedAt,
+    int? totalPausedSeconds,
+    int? guestCount,
+    double? hourlyRate,
+    List<OrderItem>? orderItems,
+    double? discount,
+    String? notes,
+    String? status,
+    String? openedBy,
+    String? venueId,
+  }) =>
+      SessionModel(
+        id: id ?? this.id,
+        tableId: tableId ?? this.tableId,
+        tableName: tableName ?? this.tableName,
+        startedAt: startedAt ?? this.startedAt,
+        endedAt: endedAt ?? this.endedAt,
+        pausedAt: pausedAt ?? this.pausedAt,
+        totalPausedSeconds: totalPausedSeconds ?? this.totalPausedSeconds,
+        guestCount: guestCount ?? this.guestCount,
+        hourlyRate: hourlyRate ?? this.hourlyRate,
+        orderItems: orderItems ?? this.orderItems,
+        discount: discount ?? this.discount,
+        notes: notes ?? this.notes,
+        status: status ?? this.status,
+        openedBy: openedBy ?? this.openedBy,
+        venueId: venueId ?? this.venueId,
+      );
 }
 
 // ─── ORDER ITEM ──────────────────────────────────────────────────────────────
@@ -212,25 +245,28 @@ class OrderItem {
   double get subtotal => unitPrice * quantity;
 
   factory OrderItem.fromMap(Map<String, dynamic> m) => OrderItem(
-    menuItemId: m['menuItemId'] ?? '',
-    name: m['name'] ?? '',
-    unitPrice: (m['unitPrice'] ?? 0.0).toDouble(),
-    quantity: m['quantity'] ?? 1,
-    category: m['category'] ?? '',
-  );
+        menuItemId: m['menuItemId'] ?? '',
+        name: m['name'] ?? '',
+        unitPrice: (m['unitPrice'] ?? 0.0).toDouble(),
+        quantity: m['quantity'] ?? 1,
+        category: m['category'] ?? '',
+      );
 
   Map<String, dynamic> toMap() => {
-    'menuItemId': menuItemId,
-    'name': name,
-    'unitPrice': unitPrice,
-    'quantity': quantity,
-    'category': category,
-  };
+        'menuItemId': menuItemId,
+        'name': name,
+        'unitPrice': unitPrice,
+        'quantity': quantity,
+        'category': category,
+      };
 
   OrderItem copyWith({int? quantity}) => OrderItem(
-    menuItemId: menuItemId, name: name, unitPrice: unitPrice,
-    quantity: quantity ?? this.quantity, category: category,
-  );
+        menuItemId: menuItemId,
+        name: name,
+        unitPrice: unitPrice,
+        quantity: quantity ?? this.quantity,
+        category: category,
+      );
 }
 
 // ─── MENU ITEM ───────────────────────────────────────────────────────────────
@@ -271,24 +307,33 @@ class MenuItem {
   }
 
   Map<String, dynamic> toFirestore() => {
-    'name': name,
-    'price': price,
-    'category': category,
-    'imageUrl': imageUrl,
-    'isAvailable': isAvailable,
-    'stockCount': stockCount,
-    'venueId': venueId,
-  };
+        'name': name,
+        'price': price,
+        'category': category,
+        'imageUrl': imageUrl,
+        'isAvailable': isAvailable,
+        'stockCount': stockCount,
+        'venueId': venueId,
+      };
 
   MenuItem copyWith({
-    String? name, double? price, String? category,
-    String? imageUrl, bool? isAvailable, int? stockCount,
-  }) => MenuItem(
-    id: id, name: name ?? this.name, price: price ?? this.price,
-    category: category ?? this.category, imageUrl: imageUrl ?? this.imageUrl,
-    isAvailable: isAvailable ?? this.isAvailable, stockCount: stockCount ?? this.stockCount,
-    venueId: venueId,
-  );
+    String? name,
+    double? price,
+    String? category,
+    String? imageUrl,
+    bool? isAvailable,
+    int? stockCount,
+  }) =>
+      MenuItem(
+        id: id,
+        name: name ?? this.name,
+        price: price ?? this.price,
+        category: category ?? this.category,
+        imageUrl: imageUrl ?? this.imageUrl,
+        isAvailable: isAvailable ?? this.isAvailable,
+        stockCount: stockCount ?? this.stockCount,
+        venueId: venueId,
+      );
 }
 
 // ─── BOOKING ─────────────────────────────────────────────────────────────────
@@ -346,26 +391,35 @@ class Booking {
   }
 
   Map<String, dynamic> toFirestore() => {
-    'tableId': tableId,
-    'tableName': tableName,
-    'guestName': guestName,
-    'guestPhone': guestPhone,
-    'scheduledAt': Timestamp.fromDate(scheduledAt),
-    'durationMinutes': durationMinutes,
-    'guestCount': guestCount,
-    'status': status,
-    'depositAmount': depositAmount,
-    'notes': notes,
-    'createdBy': createdBy,
-    'venueId': venueId,
-  };
+        'tableId': tableId,
+        'tableName': tableName,
+        'guestName': guestName,
+        'guestPhone': guestPhone,
+        'scheduledAt': Timestamp.fromDate(scheduledAt),
+        'durationMinutes': durationMinutes,
+        'guestCount': guestCount,
+        'status': status,
+        'depositAmount': depositAmount,
+        'notes': notes,
+        'createdBy': createdBy,
+        'venueId': venueId,
+      };
 
   Booking copyWith({String? status}) => Booking(
-    id: id, tableId: tableId, tableName: tableName, guestName: guestName,
-    guestPhone: guestPhone, scheduledAt: scheduledAt, durationMinutes: durationMinutes,
-    guestCount: guestCount, status: status ?? this.status, depositAmount: depositAmount,
-    notes: notes, createdBy: createdBy, venueId: venueId,
-  );
+        id: id,
+        tableId: tableId,
+        tableName: tableName,
+        guestName: guestName,
+        guestPhone: guestPhone,
+        scheduledAt: scheduledAt,
+        durationMinutes: durationMinutes,
+        guestCount: guestCount,
+        status: status ?? this.status,
+        depositAmount: depositAmount,
+        notes: notes,
+        createdBy: createdBy,
+        venueId: venueId,
+      );
 }
 
 // ─── APP USER ────────────────────────────────────────────────────────────────
@@ -407,18 +461,20 @@ class AppUser {
       ),
       venueId: d['venueId'] ?? '',
       isActive: d['isActive'] ?? true,
-      lastLogin: d['lastLogin'] != null ? (d['lastLogin'] as Timestamp).toDate() : null,
+      lastLogin: d['lastLogin'] != null
+          ? (d['lastLogin'] as Timestamp).toDate()
+          : null,
     );
   }
 
   Map<String, dynamic> toFirestore() => {
-    'name': name,
-    'email': email,
-    'role': role.name,
-    'venueId': venueId,
-    'isActive': isActive,
-    'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
-  };
+        'name': name,
+        'email': email,
+        'role': role.name,
+        'venueId': venueId,
+        'isActive': isActive,
+        'lastLogin': lastLogin != null ? Timestamp.fromDate(lastLogin!) : null,
+      };
 }
 
 // ─── VENUE ───────────────────────────────────────────────────────────────────
@@ -459,12 +515,12 @@ class Venue {
   }
 
   Map<String, dynamic> toFirestore() => {
-    'name': name,
-    'address': address,
-    'currency': currency,
-    'currencySymbol': currencySymbol,
-    'zoneRates': zoneRates,
-    'isOpen': isOpen,
-    'logoUrl': logoUrl,
-  };
+        'name': name,
+        'address': address,
+        'currency': currency,
+        'currencySymbol': currencySymbol,
+        'zoneRates': zoneRates,
+        'isOpen': isOpen,
+        'logoUrl': logoUrl,
+      };
 }

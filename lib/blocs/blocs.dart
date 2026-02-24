@@ -2,8 +2,7 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../models/models.dart';
-import "../repos/repo.dart";
-
+import '../repositories/repositories.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH BLOC

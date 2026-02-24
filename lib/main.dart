@@ -1,12 +1,12 @@
-import 'package:billiardtm/app_theme.dart';
-import 'package:billiardtm/bloc/blocs.dart';
-import 'package:billiardtm/repos/repo.dart';
-import 'package:billiardtm/router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'firebase_options.dart';
+import 'blocs/blocs.dart';
+import 'repositories/repositories.dart';
+import 'theme/app_theme.dart';
+import 'utils/router.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +14,7 @@ void main() async {
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
+
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -62,7 +63,7 @@ class TheFloorApp extends StatelessWidget {
 class _BlocProviders extends StatefulWidget {
   final AuthRepository authRepo;
   final TableRepository tableRepo;
-  final SessionRepository sessionRepo;
+  final SessionRepository sessionRepo; // still needed for StatsBloc
   final MenuRepository menuRepo;
   final BookingRepository bookingRepo;
 
@@ -81,17 +82,17 @@ class _BlocProviders extends StatefulWidget {
 class _BlocProvidersState extends State<_BlocProviders> {
   late final AuthBloc _authBloc;
   late final FloorBloc _floorBloc;
-  late final SessionBloc _sessionBloc;
   late final MenuBloc _menuBloc;
   late final BookingsBloc _bookingsBloc;
   late final StatsBloc _statsBloc;
+  // ✅ SessionBloc is intentionally NOT here — a fresh one is created per
+  //    session screen so multiple tables never share state.
 
   @override
   void initState() {
     super.initState();
     _authBloc = AuthBloc(widget.authRepo);
     _floorBloc = FloorBloc(widget.tableRepo);
-    _sessionBloc = SessionBloc(widget.sessionRepo);
     _menuBloc = MenuBloc(widget.menuRepo);
     _bookingsBloc = BookingsBloc(widget.bookingRepo);
     _statsBloc = StatsBloc(widget.sessionRepo);
@@ -103,7 +104,6 @@ class _BlocProvidersState extends State<_BlocProviders> {
       providers: [
         BlocProvider.value(value: _authBloc),
         BlocProvider.value(value: _floorBloc),
-        BlocProvider.value(value: _sessionBloc),
         BlocProvider.value(value: _menuBloc),
         BlocProvider.value(value: _bookingsBloc),
         BlocProvider.value(value: _statsBloc),
@@ -118,7 +118,6 @@ class _BlocProvidersState extends State<_BlocProviders> {
   void _onAuthChange(BuildContext context, AuthState state) {
     if (state is AuthAuthenticated) {
       final user = state.user;
-      // Load all venue data when user logs in
       _floorBloc.add(FloorLoadRequested(user.venueId));
       _menuBloc.add(MenuLoadRequested(user.venueId));
       _bookingsBloc.add(BookingsLoadRequested(user.venueId));
@@ -130,7 +129,6 @@ class _BlocProvidersState extends State<_BlocProviders> {
   void dispose() {
     _authBloc.close();
     _floorBloc.close();
-    _sessionBloc.close();
     _menuBloc.close();
     _bookingsBloc.close();
     _statsBloc.close();

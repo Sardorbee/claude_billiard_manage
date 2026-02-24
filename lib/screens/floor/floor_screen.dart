@@ -1,10 +1,11 @@
-import 'package:billiardtm/app_theme.dart';
-import 'package:billiardtm/bloc/blocs.dart';
-import 'package:billiardtm/repos/repo.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import '../../blocs/blocs.dart';
 import '../../models/models.dart';
+import '../../repositories/repositories.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
 
 class FloorScreen extends StatelessWidget {
@@ -21,8 +22,8 @@ class FloorScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('THE FLOOR'),
-            Text('LIVE STATUS MONITOR',
+            const Text('THE BILLIARD'),
+            Text('LIVE STATUS',
                 style: TextStyle(color: AppTheme.textMuted.withOpacity(0.7), fontSize: 9, letterSpacing: 0.15)),
           ],
         ),
@@ -81,8 +82,7 @@ class FloorScreen extends StatelessWidget {
         onPressed: () => _showWalkInDialog(context),
         backgroundColor: AppTheme.green,
         foregroundColor: AppTheme.bg,
-        icon: const Icon(Icons.flash_on),
-        label: const Text('QUICK WALK-IN', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.05)),
+        label: const Text("Bo'sh stollar", style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.05)),
       ),
     );
   }
@@ -146,9 +146,8 @@ class _FilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final filters = [
       (null, 'ALL'),
-      ('pool', 'POOL'),
-      ('snooker', 'SNOOKER'),
-      ('vipSuite', 'VIP SUITE'),
+      ('billiard', 'Billiard'),
+      ('ps', 'Play Station'),
     ];
     return Container(
       height: 48,
@@ -181,7 +180,6 @@ class _FilterBar extends StatelessWidget {
               ),
             );
           }),
-          // Live indicator
           const Spacer(),
           Container(
             margin: const EdgeInsets.only(right: 16),
@@ -234,7 +232,9 @@ class _ZoneSection extends StatelessWidget {
               itemCount: tables.length,
               itemBuilder: (context, i) {
                 final table = tables[i];
-                return _LiveTableCard(table: table);
+                // KEY = table.id so Flutter reuses the exact same StatefulWidget
+                // instance for the same table across rebuilds — no timer reset.
+                return _LiveTableCard(key: ValueKey(table.id), table: table);
               },
             ),
             const SizedBox(height: 16),
@@ -245,52 +245,117 @@ class _ZoneSection extends StatelessWidget {
   }
 }
 
-// Wraps TableCard with live RTDB data
-class _LiveTableCard extends StatelessWidget {
+/// Each table card owns its own RTDB subscription + 1-second ticker.
+/// It is completely isolated from every other card and from SessionBloc.
+class _LiveTableCard extends StatefulWidget {
   final TableModel table;
-  const _LiveTableCard({required this.table});
+  const _LiveTableCard({super.key, required this.table});
+
+  @override
+  State<_LiveTableCard> createState() => _LiveTableCardState();
+}
+
+class _LiveTableCardState extends State<_LiveTableCard> {
+  StreamSubscription<Map<String, dynamic>?>? _rtdbSub;
+  StreamSubscription<SessionModel?>? _fsSub;
+  double _fbTotal = 0;
+  Timer? _ticker;
+  Map<String, dynamic>? _liveData;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  @override
+  void didUpdateWidget(_LiveTableCard old) {
+    super.didUpdateWidget(old);
+    // If the table's status changed (e.g. open → active or active → open),
+    // tear down and re-subscribe so we start/stop the ticker correctly.
+    if (old.table.status != widget.table.status ||
+        old.table.id != widget.table.id) {
+      _unsubscribe();
+      _subscribe();
+    }
+  }
+
+  void _subscribe() {
+    if (widget.table.status != TableStatus.active) return;
+
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    final venueId = authState.user.venueId;
+
+    final repo = context.read<SessionRepository>();
+    _rtdbSub = repo.watchLiveSession(venueId, widget.table.id).listen((data) {
+      if (mounted) setState(() => _liveData = data);
+    });
+
+    final sessionId = widget.table.currentSessionId;
+    if (sessionId != null) {
+      _fsSub = repo.watchActiveSession(venueId, sessionId).listen((session) {
+        if (mounted) setState(() => _fbTotal = session?.fbTotal ?? 0);
+      });
+    }
+
+    // Tick every second to advance the displayed timer
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {}); // triggers _computeElapsed() in build
+    });
+  }
+
+  void _unsubscribe() {
+    _ticker?.cancel();
+    _rtdbSub?.cancel();
+    _fsSub?.cancel();
+    _fsSub = null;
+    _fbTotal = 0;
+    _ticker = null;
+    _rtdbSub = null;
+    _liveData = null;
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe();
+    super.dispose();
+  }
+
+  /// Elapsed seconds computed purely from this table's own RTDB data.
+  /// No reference to SessionBloc whatsoever.
+  int _computeElapsed() {
+    if (_liveData == null) return 0;
+    final startedAt   = (_liveData!['startedAt']     as int?) ?? 0;
+    final pausedMs    = (_liveData!['totalPausedMs']  as int?) ?? 0;
+    final pausedAt    = (_liveData!['pausedAt']       as int?);
+    final now         = pausedAt ?? DateTime.now().millisecondsSinceEpoch;
+    final result      = ((now - startedAt - pausedMs) / 1000).floor();
+    return result < 0 ? 0 : result;
+  }
 
   @override
   Widget build(BuildContext context) {
     final authState = context.read<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
 
-    if (table.status != TableStatus.active || table.currentSessionId == null) {
-      return TableCard(
-        table: table,
-        onTap: () => _onTap(context, table, user),
-      );
-    }
+    final isActive = widget.table.status == TableStatus.active;
+    final elapsed   = isActive ? _computeElapsed() : null;
+    final total = isActive && elapsed != null
+        ? (elapsed / 3600) * widget.table.hourlyRate + _fbTotal  // ← add _fbTotal
+        : null;
 
-    // Use a StreamBuilder for live data
-    final sessionRepo = context.read<SessionRepository>();
-    return StreamBuilder<Map<String, dynamic>?>(
-      stream: sessionRepo.watchLiveSession(user?.venueId ?? '', table.id),
-      builder: (context, snap) {
-        int elapsed = 0;
-        double total = 0;
-        if (snap.hasData && snap.data != null) {
-          final live = snap.data!;
-          final startedAt = live['startedAt'] as int? ?? 0;
-          final totalPausedMs = live['totalPausedMs'] as int? ?? 0;
-          final pausedAt = live['pausedAt'] as int?;
-          final now = pausedAt ?? DateTime.now().millisecondsSinceEpoch;
-          elapsed = ((now - startedAt - totalPausedMs) / 1000).floor();
-          if (elapsed < 0) elapsed = 0;
-          total = (elapsed / 3600) * table.hourlyRate;
-        }
-        return TableCard(
-          table: table,
-          elapsedSeconds: elapsed,
-          runningTotal: total,
-          onTap: () => _onTap(context, table, user),
-        );
-      },
+    return TableCard(
+      table: widget.table,
+      elapsedSeconds: elapsed,
+      runningTotal: total,
+      onTap: () => _onTap(context, user),
     );
   }
 
-  void _onTap(BuildContext context, TableModel table, AppUser? user) {
+  void _onTap(BuildContext context, AppUser? user) {
     if (user == null) return;
+    final table = widget.table;
     if (table.status == TableStatus.active && table.currentSessionId != null) {
       context.push('/session/${table.id}/${table.currentSessionId}');
     } else if (table.status == TableStatus.open) {
@@ -343,6 +408,8 @@ class _LiveTableCard extends StatelessWidget {
   }
 }
 
+// ─── Open session bottom sheet ───────────────────────────────────────────────
+
 class _OpenSessionSheet extends StatefulWidget {
   final TableModel table;
   final AppUser user;
@@ -381,17 +448,11 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _CountButton(
-                icon: Icons.remove,
-                onTap: () { if (_guestCount > 1) setState(() => _guestCount--); },
-              ),
+              _CountButton(icon: Icons.remove, onTap: () { if (_guestCount > 1) setState(() => _guestCount--); }),
               const SizedBox(width: 20),
               Text('$_guestCount', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: AppTheme.textPrimary)),
               const SizedBox(width: 20),
-              _CountButton(
-                icon: Icons.add,
-                onTap: () { if (_guestCount < 10) setState(() => _guestCount++); },
-              ),
+              _CountButton(icon: Icons.add, onTap: () { if (_guestCount < 10) setState(() => _guestCount++); }),
               const Spacer(),
               Icon(Icons.person, color: AppTheme.textMuted, size: 16),
               Text(' ${widget.table.capacity} max', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
@@ -403,13 +464,15 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                context.read<SessionBloc>().add(SessionOpenRequested(
-                  venueId: widget.user.venueId,
-                  table: widget.table,
-                  guestCount: _guestCount,
-                  openedBy: widget.user.uid,
-                ));
-                context.push('/session/${widget.table.id}/new');
+                // Pass table + guestCount as `extra` — the router creates a
+                // fresh SessionBloc for this route and dispatches SessionOpenRequested.
+                context.push(
+                  '/session/${widget.table.id}/new',
+                  extra: {
+                    'table': widget.table,
+                    'guestCount': _guestCount,
+                  },
+                );
               },
               child: const Text('START SESSION'),
             ),
@@ -481,10 +544,7 @@ class _WalkInSheet extends StatelessWidget {
             subtitle: Text('\$${t.hourlyRate.toStringAsFixed(2)}/hr · ${t.type.name}',
                 style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             trailing: const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.textMuted),
-            onTap: () {
-              Navigator.pop(context);
-              // Navigate to floor and tap table - or directly open session sheet
-            },
+            onTap: () => Navigator.pop(context),
           )),
         ],
       ),

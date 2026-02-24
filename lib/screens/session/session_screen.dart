@@ -1,11 +1,9 @@
-import 'package:billiardtm/app_theme.dart';
-import 'package:billiardtm/bloc/blocs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-
+import '../../blocs/blocs.dart';
 import '../../models/models.dart';
-
+import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
 
 class SessionScreen extends StatelessWidget {
@@ -22,7 +20,8 @@ class SessionScreen extends StatelessWidget {
           _showReceiptSheet(context, state.session);
         }
         if (state is SessionInitial) {
-          context.pop();
+          // Voided — go back to floor
+          if (context.canPop()) context.pop();
         }
       },
       builder: (context, state) {
@@ -50,7 +49,11 @@ class SessionScreen extends StatelessWidget {
             )),
           );
         }
-        return const Scaffold(backgroundColor: AppTheme.bg);
+        // SessionInitial = loading spinner while bloc fires the first event
+        return const Scaffold(
+          backgroundColor: AppTheme.bg,
+          body: Center(child: CircularProgressIndicator(color: AppTheme.green)),
+        );
       },
     );
   }
@@ -721,8 +724,15 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
   void _confirmOrder(BuildContext context, List<MenuItem> items) {
     final orderItems = _cart.entries.map((entry) {
       final item = items.firstWhere((i) => i.id == entry.key);
-      return OrderItem(menuItemId: item.id, name: item.name, unitPrice: item.price, quantity: entry.value, category: item.category);
+      return OrderItem(
+        menuItemId: item.id,
+        name: item.name,
+        unitPrice: item.price,
+        quantity: entry.value,
+        category: item.category,
+      );
     }).toList();
+    // SessionBloc here is the LOCAL one created by the router for this route
     context.read<SessionBloc>().add(SessionAddItemsRequested(orderItems));
     Navigator.pop(context);
   }
