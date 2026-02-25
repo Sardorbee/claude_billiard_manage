@@ -10,7 +10,8 @@ class SessionScreen extends StatelessWidget {
   final String tableId;
   final String sessionId;
 
-  const SessionScreen({super.key, required this.tableId, required this.sessionId});
+  const SessionScreen(
+      {super.key, required this.tableId, required this.sessionId});
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +29,8 @@ class SessionScreen extends StatelessWidget {
         if (state is SessionLoading) {
           return const Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: CircularProgressIndicator(color: AppTheme.green)),
+            body:
+                Center(child: CircularProgressIndicator(color: AppTheme.green)),
           );
         }
         if (state is SessionActive) {
@@ -37,14 +39,18 @@ class SessionScreen extends StatelessWidget {
         if (state is SessionError) {
           return Scaffold(
             backgroundColor: AppTheme.bg,
-            body: Center(child: Column(
+            body: Center(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.error_outline, color: AppTheme.red, size: 40),
                 const SizedBox(height: 12),
-                Text(state.message, style: const TextStyle(color: AppTheme.red)),
+                Text(state.message,
+                    style: const TextStyle(color: AppTheme.red)),
                 const SizedBox(height: 16),
-                TextButton(onPressed: () => context.pop(), child: const Text('Go back')),
+                TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('Go back')),
               ],
             )),
           );
@@ -59,19 +65,30 @@ class SessionScreen extends StatelessWidget {
   }
 
   void _showReceiptSheet(BuildContext ctx, SessionModel session) {
-    showModalBottomSheet(
+    showDialog(
       context: ctx,
-      backgroundColor: AppTheme.surface,
-      isScrollControlled: true,
-      isDismissible: false,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-        side: BorderSide(color: AppTheme.border),
-      ),
-      builder: (_) => _ReceiptSheet(session: session, onDone: () {
-        Navigator.pop(_);
-        ctx.pop();
-      }),
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: AppTheme.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+            side: BorderSide(color: AppTheme.border),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: 500, // control width
+            ),
+            child: _ReceiptSheet(
+              session: session,
+              onDone: () {
+                Navigator.pop(context);
+                ctx.pop();
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -101,11 +118,17 @@ class _ActiveSessionView extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 6, height: 6,
-                  decoration: const BoxDecoration(color: AppTheme.green, shape: BoxShape.circle),
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                      color: AppTheme.green, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
-                const Text('ACTIVE SESSION', style: TextStyle(color: AppTheme.green, fontSize: 10, letterSpacing: 0.1)),
+                const Text('ACTIVE SESSION',
+                    style: TextStyle(
+                        color: AppTheme.green,
+                        fontSize: 10,
+                        letterSpacing: 0.1)),
               ],
             ),
           ],
@@ -117,7 +140,8 @@ class _ActiveSessionView extends StatelessWidget {
             itemBuilder: (_) => [
               _menuItem('notes', Icons.note_outlined, 'Add Note'),
               _menuItem('discount', Icons.discount_outlined, 'Apply Discount'),
-              _menuItem('void', Icons.delete_outline, 'Void Session', color: AppTheme.red),
+              _menuItem('void', Icons.delete_outline, 'Void Session',
+                  color: AppTheme.red),
             ],
           ),
         ],
@@ -131,7 +155,11 @@ class _ActiveSessionView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Column(
                 children: [
-                  const Text('TIME ELAPSED', style: TextStyle(color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.15)),
+                  const Text('TIME ELAPSED',
+                      style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 10,
+                          letterSpacing: 0.15)),
                   const SizedBox(height: 20),
                   TimerRing(
                     elapsedSeconds: state.elapsedSeconds,
@@ -149,9 +177,13 @@ class _ActiveSessionView extends StatelessWidget {
                         label: state.isPaused ? 'RESUME' : 'PAUSE',
                         onTap: () {
                           if (state.isPaused) {
-                            context.read<SessionBloc>().add(SessionResumeRequested());
+                            context
+                                .read<SessionBloc>()
+                                .add(SessionResumeRequested());
                           } else {
-                            context.read<SessionBloc>().add(SessionPauseRequested());
+                            context
+                                .read<SessionBloc>()
+                                .add(SessionPauseRequested());
                           }
                         },
                       ),
@@ -183,7 +215,8 @@ class _ActiveSessionView extends StatelessWidget {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                child: SectionHeader('Tab Items (${session.orderItems.length})'),
+                child:
+                    SectionHeader('Tab Items (${session.orderItems.length})'),
               ),
             ),
             SliverList(
@@ -212,9 +245,14 @@ class _ActiveSessionView extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.note, color: AppTheme.textMuted, size: 16),
+                      const Icon(Icons.note,
+                          color: AppTheme.textMuted, size: 16),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(session.notes!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13))),
+                      Expanded(
+                          child: Text(session.notes!,
+                              style: const TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 13))),
                     ],
                   ),
                 ),
@@ -228,14 +266,17 @@ class _ActiveSessionView extends StatelessWidget {
     );
   }
 
-  PopupMenuItem<String> _menuItem(String value, IconData icon, String label, {Color? color}) {
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label,
+      {Color? color}) {
     return PopupMenuItem(
       value: value,
       child: Row(
         children: [
           Icon(icon, size: 16, color: color ?? AppTheme.textSecondary),
           const SizedBox(width: 10),
-          Text(label, style: TextStyle(color: color ?? AppTheme.textPrimary, fontSize: 14)),
+          Text(label,
+              style: TextStyle(
+                  color: color ?? AppTheme.textPrimary, fontSize: 14)),
         ],
       ),
     );
@@ -266,10 +307,12 @@ class _ActiveSessionView extends StatelessWidget {
           maxLines: 4,
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: const InputDecoration(hintText: 'Add notes for this session...'),
+          decoration:
+              const InputDecoration(hintText: 'Add notes for this session...'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               context.read<SessionBloc>().add(SessionNotesUpdated(ctrl.text));
@@ -294,29 +337,45 @@ class _ActiveSessionView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Apply Discount', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const Text('Apply Discount',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [5, 10, 15, 20, 25, 50].map((pct) => GestureDetector(
-                  onTap: () => setSt(() => discount = pct.toDouble()),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: discount == pct ? AppTheme.green.withOpacity(0.15) : AppTheme.surface2,
-                      border: Border.all(color: discount == pct ? AppTheme.green : AppTheme.border),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text('$pct%', style: TextStyle(color: discount == pct ? AppTheme.green : AppTheme.textPrimary, fontWeight: FontWeight.w700)),
-                  ),
-                )).toList(),
+                children: [5, 10, 15, 20, 25, 50]
+                    .map((pct) => GestureDetector(
+                          onTap: () => setSt(() => discount = pct.toDouble()),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: discount == pct
+                                  ? AppTheme.green.withOpacity(0.15)
+                                  : AppTheme.surface2,
+                              border: Border.all(
+                                  color: discount == pct
+                                      ? AppTheme.green
+                                      : AppTheme.border),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text('$pct%',
+                                style: TextStyle(
+                                    color: discount == pct
+                                        ? AppTheme.green
+                                        : AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ))
+                    .toList(),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
-                    context.read<SessionBloc>().add(SessionDiscountApplied(discount));
+                    context
+                        .read<SessionBloc>()
+                        .add(SessionDiscountApplied(discount));
                     Navigator.pop(_);
                   },
                   child: Text('APPLY ${discount.toInt()}% DISCOUNT'),
@@ -334,11 +393,15 @@ class _ActiveSessionView extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Void Session?'),
-        content: const Text('This will cancel the session and free the table. This action cannot be undone.'),
+        content: const Text(
+            'This will cancel the session and free the table. This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.red, foregroundColor: AppTheme.textPrimary),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.red,
+                foregroundColor: AppTheme.textPrimary),
             onPressed: () {
               context.read<SessionBloc>().add(SessionVoidRequested());
               Navigator.pop(_);
@@ -387,7 +450,11 @@ class _ActionButton extends StatelessWidget {
   final VoidCallback onTap;
   final Color? color;
 
-  const _ActionButton({required this.icon, required this.label, required this.onTap, this.color});
+  const _ActionButton(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +464,8 @@ class _ActionButton extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 52, height: 52,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               color: c.withOpacity(0.1),
               border: Border.all(color: c.withOpacity(0.3)),
@@ -406,7 +474,12 @@ class _ActionButton extends StatelessWidget {
             child: Icon(icon, color: c, size: 22),
           ),
           const SizedBox(height: 6),
-          Text(label, style: TextStyle(color: c, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 0.08)),
+          Text(label,
+              style: TextStyle(
+                  color: c,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.08)),
         ],
       ),
     );
@@ -429,16 +502,23 @@ class _OrderItemRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: Column(
+          Expanded(
+              child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text(item.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14)),
               Text('\$${item.unitPrice.toStringAsFixed(2)} × ${item.quantity}',
-                  style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  style:
+                      const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             ],
           )),
           Text('\$${item.subtotal.toStringAsFixed(2)}',
-              style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w700, fontSize: 14)),
+              style: const TextStyle(
+                  color: AppTheme.green,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14)),
         ],
       ),
     );
@@ -452,7 +532,8 @@ class _BottomBillingBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
       decoration: const BoxDecoration(
         color: AppTheme.surface,
         border: Border(top: BorderSide(color: AppTheme.border)),
@@ -463,22 +544,33 @@ class _BottomBillingBar extends StatelessWidget {
           // Bill breakdown
           Row(
             children: [
-              Expanded(child: Column(
+              Expanded(
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _BillRow('Time', '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
+                  _BillRow('Time',
+                      '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
                   _BillRow('F&B', '\$${state.fbTotal.toStringAsFixed(2)}'),
                   if (state.session.discount > 0)
                     _BillRow('Discount (${state.session.discount.toInt()}%)',
-                        '-\$${state.discountAmount.toStringAsFixed(2)}', color: AppTheme.green),
+                        '-\$${state.discountAmount.toStringAsFixed(2)}',
+                        color: AppTheme.green),
                 ],
               )),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('TOTAL BALANCE', style: TextStyle(color: AppTheme.textMuted, fontSize: 9, letterSpacing: 0.1)),
+                  const Text('TOTAL BALANCE',
+                      style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 9,
+                          letterSpacing: 0.1)),
                   Text('\$${state.total.toStringAsFixed(2)}',
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -1)),
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary,
+                          letterSpacing: -1)),
                 ],
               ),
             ],
@@ -490,8 +582,10 @@ class _BottomBillingBar extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () => _showCheckoutConfirm(context),
               icon: const Icon(Icons.check_circle_outline, size: 18),
-              label: Text('CHECKOUT & CLEAR · \$${state.total.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.05)),
+              label: Text(
+                  'CHECKOUT & CLEAR · \$${state.total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, letterSpacing: 0.05)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.green,
                 foregroundColor: AppTheme.bg,
@@ -515,24 +609,30 @@ class _BottomBillingBar extends StatelessWidget {
           children: [
             _DialogRow('Table', state.session.tableName),
             _DialogRow('Time', formatTime(state.elapsedSeconds)),
-            _DialogRow('Time Charge', '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
+            _DialogRow('Time Charge',
+                '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
             _DialogRow('F&B', '\$${state.fbTotal.toStringAsFixed(2)}'),
             if (state.session.discount > 0)
-              _DialogRow('Discount', '-\$${state.discountAmount.toStringAsFixed(2)}'),
+              _DialogRow(
+                  'Discount', '-\$${state.discountAmount.toStringAsFixed(2)}'),
             const Divider(color: AppTheme.border),
-            _DialogRow('TOTAL', '\$${state.total.toStringAsFixed(2)}', bold: true),
+            _DialogRow('TOTAL', '\$${state.total.toStringAsFixed(2)}',
+                bold: true),
             const SizedBox(height: 8),
             const Row(
               children: [
-                Icon(Icons.payments_outlined, color: AppTheme.textMuted, size: 14),
+                Icon(Icons.payments_outlined,
+                    color: AppTheme.textMuted, size: 14),
                 SizedBox(width: 6),
-                Text('Cash payment', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                Text('Cash payment',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
               ],
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
               context.read<SessionBloc>().add(SessionCheckoutRequested());
@@ -554,14 +654,20 @@ class _BillRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 1),
-    child: Row(
-      children: [
-        Text('$label  ', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-        Text(value, style: TextStyle(color: color ?? AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
-    ),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(
+          children: [
+            Text('$label  ',
+                style:
+                    const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+            Text(value,
+                style: TextStyle(
+                    color: color ?? AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
 }
 
 class _DialogRow extends StatelessWidget {
@@ -572,21 +678,30 @@ class _DialogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 3),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: bold ? AppTheme.textPrimary : AppTheme.textMuted, fontWeight: bold ? FontWeight.w800 : FontWeight.normal, fontSize: bold ? 15 : 13)),
-        Text(value, style: TextStyle(color: bold ? AppTheme.green : AppTheme.textPrimary, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, fontSize: bold ? 15 : 13)),
-      ],
-    ),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: bold ? AppTheme.textPrimary : AppTheme.textMuted,
+                    fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
+                    fontSize: bold ? 15 : 13)),
+            Text(value,
+                style: TextStyle(
+                    color: bold ? AppTheme.green : AppTheme.textPrimary,
+                    fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                    fontSize: bold ? 15 : 13)),
+          ],
+        ),
+      );
 }
 
 class _AddItemsSheet extends StatefulWidget {
   final ScrollController controller;
   const _AddItemsSheet({required this.controller});
-  @override State<_AddItemsSheet> createState() => _AddItemsSheetState();
+  @override
+  State<_AddItemsSheet> createState() => _AddItemsSheetState();
 }
 
 class _AddItemsSheetState extends State<_AddItemsSheet> {
@@ -597,8 +712,12 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
 
   List<MenuItem> _filtered(List<MenuItem> all) {
     var items = all;
-    if (_category != null) items = items.where((i) => i.category == _category).toList();
-    if (_search.isNotEmpty) items = items.where((i) => i.name.toLowerCase().contains(_search.toLowerCase())).toList();
+    if (_category != null)
+      items = items.where((i) => i.category == _category).toList();
+    if (_search.isNotEmpty)
+      items = items
+          .where((i) => i.name.toLowerCase().contains(_search.toLowerCase()))
+          .toList();
     return items;
   }
 
@@ -608,8 +727,10 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
   Widget build(BuildContext context) {
     return BlocBuilder<MenuBloc, MenuState>(
       builder: (context, menuState) {
-        final allItems = menuState is MenuLoaded ? menuState.allItems : <MenuItem>[];
-        final categories = allItems.map((i) => i.category).toSet().toList()..sort();
+        final allItems =
+            menuState is MenuLoaded ? menuState.allItems : <MenuItem>[];
+        final categories = allItems.map((i) => i.category).toSet().toList()
+          ..sort();
         final filtered = _filtered(allItems);
 
         return Column(
@@ -620,8 +741,12 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('ADD TO TABLE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  const Text('Select items for current session', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  const Text('ADD TO TABLE',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Text('Select items for current session',
+                      style:
+                          TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                   const SizedBox(height: 12),
                   // Search
                   TextField(
@@ -639,12 +764,15 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _CategoryChip(label: 'All', selected: _category == null, onTap: () => setState(() => _category = null)),
+                        _CategoryChip(
+                            label: 'All',
+                            selected: _category == null,
+                            onTap: () => setState(() => _category = null)),
                         ...categories.map((c) => _CategoryChip(
-                          label: c.toUpperCase(),
-                          selected: _category == c,
-                          onTap: () => setState(() => _category = c),
-                        )),
+                              label: c.toUpperCase(),
+                              selected: _category == c,
+                              onTap: () => setState(() => _category = c),
+                            )),
                       ],
                     ),
                   ),
@@ -671,8 +799,11 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
                     quantity: qty,
                     onAdd: () => setState(() => _cart[item.id] = qty + 1),
                     onRemove: () => setState(() {
-                      if (qty > 1) _cart[item.id] = qty - 1;
-                      else _cart.remove(item.id);
+                      if (qty > 1) {
+                        _cart[item.id] = qty - 1;
+                      } else {
+                        _cart.remove(item.id);
+                      }
                     }),
                   );
                 },
@@ -681,7 +812,8 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
             // Confirm bar
             if (_totalItems > 0)
               Container(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+                padding: EdgeInsets.fromLTRB(
+                    16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
                 decoration: const BoxDecoration(
                   color: AppTheme.surface,
                   border: Border(top: BorderSide(color: AppTheme.border)),
@@ -692,9 +824,15 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DRAFT ORDER', style: TextStyle(color: AppTheme.textMuted.withOpacity(0.8), fontSize: 9, letterSpacing: 0.1)),
-                          Text('$_totalItems item${_totalItems > 1 ? 's' : ''} · \$${_cartTotal(allItems).toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                          Text('DRAFT ORDER',
+                              style: TextStyle(
+                                  color: AppTheme.textMuted.withOpacity(0.8),
+                                  fontSize: 9,
+                                  letterSpacing: 0.1)),
+                          Text(
+                              '$_totalItems item${_totalItems > 1 ? 's' : ''} · \$${_cartTotal(allItems).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 15)),
                         ],
                       ),
                     ),
@@ -715,7 +853,9 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
   double _cartTotal(List<MenuItem> items) {
     double total = 0;
     for (final entry in _cart.entries) {
-      final item = items.firstWhere((i) => i.id == entry.key, orElse: () => MenuItem(id: '', name: '', price: 0, category: '', venueId: ''));
+      final item = items.firstWhere((i) => i.id == entry.key,
+          orElse: () =>
+              MenuItem(id: '', name: '', price: 0, category: '', venueId: ''));
       total += item.price * entry.value;
     }
     return total;
@@ -742,24 +882,32 @@ class _CategoryChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _CategoryChip({required this.label, required this.selected, required this.onTap});
+  const _CategoryChip(
+      {required this.label, required this.selected, required this.onTap});
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(right: 8),
-    child: GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? AppTheme.green.withOpacity(0.15) : AppTheme.surface2,
-          border: Border.all(color: selected ? AppTheme.green : AppTheme.border),
-          borderRadius: BorderRadius.circular(2),
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppTheme.green.withOpacity(0.15)
+                  : AppTheme.surface2,
+              border: Border.all(
+                  color: selected ? AppTheme.green : AppTheme.border),
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(label,
+                style: TextStyle(
+                    color: selected ? AppTheme.green : AppTheme.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700)),
+          ),
         ),
-        child: Text(label, style: TextStyle(color: selected ? AppTheme.green : AppTheme.textMuted, fontSize: 11, fontWeight: FontWeight.w700)),
-      ),
-    ),
-  );
+      );
 }
 
 class _TransferSheet extends StatelessWidget {
@@ -771,33 +919,49 @@ class _TransferSheet extends StatelessWidget {
     return BlocBuilder<FloorBloc, FloorState>(
       builder: (context, state) {
         if (state is! FloorLoaded) return const SizedBox();
-        final openTables = state.allTables.where((t) => t.status == TableStatus.open && t.id != currentTableId).toList();
+        final openTables = state.allTables
+            .where(
+                (t) => t.status == TableStatus.open && t.id != currentTableId)
+            .toList();
         return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Transfer Session', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const Text('Select destination table', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+              const Text('Transfer Session',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const Text('Select destination table',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
               const SizedBox(height: 20),
               if (openTables.isEmpty)
-                const Center(child: Text('No open tables available', style: TextStyle(color: AppTheme.textMuted)))
+                const Center(
+                    child: Text('No open tables available',
+                        style: TextStyle(color: AppTheme.textMuted)))
               else
                 ...openTables.map((t) => ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(color: AppTheme.surface2, borderRadius: BorderRadius.circular(4)),
-                    child: const Icon(Icons.table_bar, color: AppTheme.green, size: 18),
-                  ),
-                  title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(t.zone, style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                  onTap: () {
-                    context.read<SessionBloc>().add(SessionTransferRequested(toTableId: t.id, toTableName: t.name));
-                    Navigator.pop(context);
-                  },
-                )),
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                            color: AppTheme.surface2,
+                            borderRadius: BorderRadius.circular(4)),
+                        child: const Icon(Icons.table_bar,
+                            color: AppTheme.green, size: 18),
+                      ),
+                      title: Text(t.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(t.zone,
+                          style: const TextStyle(
+                              color: AppTheme.textMuted, fontSize: 12)),
+                      onTap: () {
+                        context.read<SessionBloc>().add(
+                            SessionTransferRequested(
+                                toTableId: t.id, toTableName: t.name));
+                        Navigator.pop(context);
+                      },
+                    )),
             ],
           ),
         );
@@ -814,7 +978,8 @@ class _ReceiptSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 24, 24, MediaQuery.of(context).padding.bottom + 24),
+      padding: EdgeInsets.fromLTRB(
+          24, 24, 24, MediaQuery.of(context).padding.bottom + 24),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -822,16 +987,22 @@ class _ReceiptSheet extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(color: AppTheme.green.withOpacity(0.15), borderRadius: BorderRadius.circular(4)),
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                    color: AppTheme.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(4)),
                 child: const Icon(Icons.check, color: AppTheme.green, size: 22),
               ),
               const SizedBox(width: 14),
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Session Completed', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text('Table is now free', style: TextStyle(color: AppTheme.green, fontSize: 12)),
+                  Text('Session Completed',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text('Table is now free',
+                      style: TextStyle(color: AppTheme.green, fontSize: 12)),
                 ],
               ),
             ],
@@ -843,9 +1014,11 @@ class _ReceiptSheet extends StatelessWidget {
           _DialogRow('Time', '\$${session.timeCharge.toStringAsFixed(2)}'),
           _DialogRow('F&B', '\$${session.fbTotal.toStringAsFixed(2)}'),
           if (session.discount > 0)
-            _DialogRow('Discount (${session.discount.toInt()}%)', '-\$${session.discountAmount.toStringAsFixed(2)}'),
+            _DialogRow('Discount (${session.discount.toInt()}%)',
+                '-\$${session.discountAmount.toStringAsFixed(2)}'),
           const Divider(color: AppTheme.border),
-          _DialogRow('TOTAL', '\$${session.total.toStringAsFixed(2)}', bold: true),
+          _DialogRow('TOTAL', '\$${session.total.toStringAsFixed(2)}',
+              bold: true),
           const SizedBox(height: 24),
           Row(
             children: [

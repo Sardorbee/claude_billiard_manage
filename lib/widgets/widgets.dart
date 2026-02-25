@@ -12,14 +12,23 @@ class StatusBadge extends StatelessWidget {
 
   Color get color {
     switch (status) {
-      case 'active': return AppTheme.green;
-      case 'reserved': return AppTheme.amber;
-      case 'maintenance': return AppTheme.red;
-      case 'open': return AppTheme.textMuted;
-      case 'completed': return AppTheme.blue;
-      case 'cancelled': case 'no_show': return AppTheme.red;
-      case 'confirmed': return AppTheme.green;
-      default: return AppTheme.textMuted;
+      case 'active':
+        return AppTheme.green;
+      case 'reserved':
+        return AppTheme.amber;
+      case 'maintenance':
+        return AppTheme.red;
+      case 'open':
+        return AppTheme.textMuted;
+      case 'completed':
+        return AppTheme.blue;
+      case 'cancelled':
+      case 'no_show':
+        return AppTheme.red;
+      case 'confirmed':
+        return AppTheme.green;
+      default:
+        return AppTheme.textMuted;
     }
   }
 
@@ -27,11 +36,15 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     if (dot) {
       return Container(
-        width: 8, height: 8,
+        width: 8,
+        height: 8,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color,
-          boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)],
+          boxShadow: [
+            BoxShadow(
+                color: color.withOpacity(0.5), blurRadius: 4, spreadRadius: 1)
+          ],
         ),
       );
     }
@@ -73,10 +86,14 @@ class TableCard extends StatelessWidget {
 
   Color get _borderColor {
     switch (table.status) {
-      case TableStatus.active: return AppTheme.green.withOpacity(0.4);
-      case TableStatus.reserved: return AppTheme.amber.withOpacity(0.4);
-      case TableStatus.maintenance: return AppTheme.red.withOpacity(0.4);
-      default: return AppTheme.border;
+      case TableStatus.active:
+        return AppTheme.green.withOpacity(0.4);
+      case TableStatus.reserved:
+        return AppTheme.amber.withOpacity(0.4);
+      case TableStatus.maintenance:
+        return AppTheme.red.withOpacity(0.4);
+      default:
+        return AppTheme.border;
     }
   }
 
@@ -115,7 +132,8 @@ class TableCard extends StatelessWidget {
             if (table.status == TableStatus.open)
               _OpenContent()
             else if (table.status == TableStatus.active)
-              _ActiveContent(elapsedSeconds: elapsedSeconds ?? 0, total: runningTotal ?? 0)
+              _ActiveContent(
+                  elapsedSeconds: elapsedSeconds ?? 0, total: runningTotal ?? 0)
             else if (table.status == TableStatus.reserved)
               _ReservedContent()
             else
@@ -133,7 +151,12 @@ class _OpenContent extends StatelessWidget {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('OPEN', style: TextStyle(color: AppTheme.textMuted, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.1)),
+        child: Text('OPEN',
+            style: TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.1)),
       ),
     );
   }
@@ -183,7 +206,11 @@ class _ReservedContent extends StatelessWidget {
       children: [
         Icon(Icons.schedule, color: AppTheme.amber, size: 14),
         SizedBox(width: 6),
-        Text('RESERVED', style: TextStyle(color: AppTheme.amber, fontSize: 12, fontWeight: FontWeight.w600)),
+        Text('RESERVED',
+            style: TextStyle(
+                color: AppTheme.amber,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -196,7 +223,11 @@ class _MaintenanceContent extends StatelessWidget {
       children: [
         Icon(Icons.build, color: AppTheme.red, size: 14),
         SizedBox(width: 6),
-        Text('MAINTENANCE', style: TextStyle(color: AppTheme.red, fontSize: 12, fontWeight: FontWeight.w600)),
+        Text('MAINTENANCE',
+            style: TextStyle(
+                color: AppTheme.red,
+                fontSize: 12,
+                fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -269,7 +300,11 @@ class StatCard extends StatelessWidget {
                 Icon(icon, color: AppTheme.textMuted, size: 14),
                 const SizedBox(width: 6),
               ],
-              Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 11, letterSpacing: 0.05)),
+              Text(label,
+                  style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                      letterSpacing: 0.05)),
             ],
           ),
           const SizedBox(height: 8),
@@ -312,7 +347,10 @@ class MenuItemCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        border: Border.all(color: quantity > 0 ? AppTheme.green.withOpacity(0.3) : AppTheme.border),
+        border: Border.all(
+            color: quantity > 0
+                ? AppTheme.green.withOpacity(0.3)
+                : AppTheme.border),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -322,20 +360,26 @@ class MenuItemCard extends StatelessWidget {
           Expanded(
             flex: 3,
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(3)),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   item.imageUrl != null
-                      ? Image.network(item.imageUrl!, fit: BoxFit.cover,
+                      ? Image.network(item.imageUrl!,
+                          fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => _placeholder())
                       : _placeholder(),
                   if (!item.isAvailable)
                     Container(
                       color: Colors.black54,
                       alignment: Alignment.center,
-                      child: const Text('OUT OF\nSTOCK', textAlign: TextAlign.center,
-                          style: TextStyle(color: AppTheme.red, fontSize: 10, fontWeight: FontWeight.w800)),
+                      child: const Text('OUT OF\nSTOCK',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              color: AppTheme.red,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800)),
                     ),
                 ],
               ),
@@ -343,60 +387,88 @@ class MenuItemCard extends StatelessWidget {
           ),
           // Info
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  Text(item.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600)),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('\$${item.price.toStringAsFixed(2)}',
-                          style: const TextStyle(color: AppTheme.green, fontSize: 12, fontWeight: FontWeight.w700)),
-                      if (quantity > 0)
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: onRemove,
-                              child: Container(
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(color: AppTheme.surface2, borderRadius: BorderRadius.circular(2)),
-                                child: const Icon(Icons.remove, size: 12, color: AppTheme.textMuted),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              child: Text('$quantity', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                            ),
-                            GestureDetector(
-                              onTap: item.isAvailable ? onAdd : null,
-                              child: Container(
-                                width: 20, height: 20,
-                                decoration: BoxDecoration(color: AppTheme.green.withOpacity(0.2), borderRadius: BorderRadius.circular(2)),
-                                child: const Icon(Icons.add, size: 12, color: AppTheme.green),
-                              ),
-                            ),
-                          ],
-                        )
-                      else
+                      Text(
+                        '\$${item.price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            color: AppTheme.green,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  if (quantity > 0)
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: onRemove,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                                color: AppTheme.surface2,
+                                borderRadius: BorderRadius.circular(2)),
+                            child: const Icon(Icons.remove,
+                                size: 12, color: AppTheme.textMuted),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('$quantity',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 13)),
+                        ),
                         GestureDetector(
                           onTap: item.isAvailable ? onAdd : null,
                           child: Container(
-                            width: 24, height: 24,
+                            width: 20,
+                            height: 20,
                             decoration: BoxDecoration(
-                              color: item.isAvailable ? AppTheme.green.withOpacity(0.15) : AppTheme.surface2,
-                              borderRadius: BorderRadius.circular(2),
-                              border: Border.all(color: item.isAvailable ? AppTheme.green.withOpacity(0.4) : AppTheme.border),
-                            ),
-                            child: Icon(Icons.add, size: 14, color: item.isAvailable ? AppTheme.green : AppTheme.textMuted),
+                                color: AppTheme.green.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(2)),
+                            child: const Icon(Icons.add,
+                                size: 12, color: AppTheme.green),
                           ),
                         ),
-                    ],
-                  ),
+                      ],
+                    )
+                  else
+                    GestureDetector(
+                      onTap: item.isAvailable ? onAdd : null,
+                      child: Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: item.isAvailable
+                              ? AppTheme.green.withOpacity(0.15)
+                              : AppTheme.surface2,
+                          borderRadius: BorderRadius.circular(2),
+                          border: Border.all(
+                              color: item.isAvailable
+                                  ? AppTheme.green.withOpacity(0.4)
+                                  : AppTheme.border),
+                        ),
+                        child: Icon(Icons.add,
+                            size: 14,
+                            color: item.isAvailable
+                                ? AppTheme.green
+                                : AppTheme.textMuted),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -407,9 +479,10 @@ class MenuItemCard extends StatelessWidget {
   }
 
   Widget _placeholder() => Container(
-    color: AppTheme.surface2,
-    child: const Icon(Icons.fastfood_outlined, color: AppTheme.textMuted, size: 28),
-  );
+        color: AppTheme.surface2,
+        child: const Icon(Icons.fastfood_outlined,
+            color: AppTheme.textMuted, size: 28),
+      );
 }
 
 // ─── APP BOTTOM NAV ───────────────────────────────────────────────────────────
@@ -439,11 +512,16 @@ class AppBottomNav extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.grid_view_rounded), label: 'Floor'),
-          const BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
-          const BottomNavigationBarItem(icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.grid_view_rounded), label: 'Floor'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
           if (isAdmin)
-            const BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_outlined), label: 'Admin'),
+            const BottomNavigationBarItem(
+                icon: Icon(Icons.admin_panel_settings_outlined),
+                label: 'Admin'),
         ],
       ),
     );
@@ -464,10 +542,12 @@ class LoadingOverlay extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(color: AppTheme.green, strokeWidth: 2),
+            const CircularProgressIndicator(
+                color: AppTheme.green, strokeWidth: 2),
             if (message != null) ...[
               const SizedBox(height: 16),
-              Text(message!, style: const TextStyle(color: AppTheme.textPrimary)),
+              Text(message!,
+                  style: const TextStyle(color: AppTheme.textPrimary)),
             ],
           ],
         ),
@@ -496,13 +576,15 @@ class TimerRing extends StatelessWidget {
   Widget build(BuildContext context) {
     final progress = (elapsedSeconds % 3600) / 3600;
     return SizedBox(
-      width: 200, height: 200,
+      width: 200,
+      height: 200,
       child: Stack(
         alignment: Alignment.center,
         children: [
           // Background ring
           SizedBox(
-            width: 200, height: 200,
+            width: 200,
+            height: 200,
             child: CircularProgressIndicator(
               value: 1,
               strokeWidth: 6,
@@ -512,12 +594,14 @@ class TimerRing extends StatelessWidget {
           ),
           // Progress ring
           SizedBox(
-            width: 200, height: 200,
+            width: 200,
+            height: 200,
             child: CircularProgressIndicator(
               value: progress,
               strokeWidth: 6,
               backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation(isPaused ? AppTheme.amber : AppTheme.green),
+              valueColor: AlwaysStoppedAnimation(
+                  isPaused ? AppTheme.amber : AppTheme.green),
             ),
           ),
           // Center content
@@ -538,7 +622,10 @@ class TimerRing extends StatelessWidget {
               ),
               Text(
                 subLabel,
-                style: const TextStyle(color: AppTheme.green, fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                    color: AppTheme.green,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600),
               ),
             ],
           ),
