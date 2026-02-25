@@ -92,6 +92,43 @@ class TableModel {
 }
 
 // ─── SESSION ─────────────────────────────────────────────────────────────────
+class SessionSplit {
+  final String id;
+  final String payerName; // loser who pays this split
+  final int durationSeconds; // how long this split lasted
+  final double timeCharge; // cost for this split's time
+  final double fbCharge; // F&B consumed during this split (optional)
+  final DateTime splitAt;
+
+  const SessionSplit({
+    required this.id,
+    required this.payerName,
+    required this.durationSeconds,
+    required this.timeCharge,
+    this.fbCharge = 0,
+    required this.splitAt,
+  });
+
+  double get total => timeCharge + fbCharge;
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'payerName': payerName,
+        'durationSeconds': durationSeconds,
+        'timeCharge': timeCharge,
+        'fbCharge': fbCharge,
+        'splitAt': Timestamp.fromDate(splitAt),
+      };
+
+  factory SessionSplit.fromMap(Map<String, dynamic> m) => SessionSplit(
+        id: m['id'] ?? '',
+        payerName: m['payerName'] ?? '',
+        durationSeconds: m['durationSeconds'] ?? 0,
+        timeCharge: (m['timeCharge'] ?? 0).toDouble(),
+        fbCharge: (m['fbCharge'] ?? 0).toDouble(),
+        splitAt: (m['splitAt'] as Timestamp).toDate(),
+      );
+}
 
 class SessionModel {
   final String id;
@@ -109,24 +146,28 @@ class SessionModel {
   final String status; // active | completed | voided
   final String openedBy; // staff uid
   final String venueId;
+  final List<SessionSplit> splits; // all recorded splits
 
-  const SessionModel({
-    required this.id,
-    required this.tableId,
-    required this.tableName,
-    required this.startedAt,
-    this.endedAt,
-    this.pausedAt,
-    this.totalPausedSeconds = 0,
-    required this.guestCount,
-    required this.hourlyRate,
-    this.orderItems = const [],
-    this.discount = 0,
-    this.notes,
-    this.status = 'active',
-    required this.openedBy,
-    required this.venueId,
-  });
+// Total already-split time charge
+  double get splitTotal => splits.fold(0, (sum, s) => sum + s.total);
+
+  const SessionModel(
+      {required this.id,
+      required this.tableId,
+      required this.tableName,
+      required this.startedAt,
+      this.endedAt,
+      this.pausedAt,
+      this.totalPausedSeconds = 0,
+      required this.guestCount,
+      required this.hourlyRate,
+      this.orderItems = const [],
+      this.discount = 0,
+      this.notes,
+      this.status = 'active',
+      required this.openedBy,
+      required this.venueId,
+      this.splits = const []});
 
   // ─── Billing calculation (all local) ───────────────────────────
   double get elapsedSeconds {
@@ -135,7 +176,42 @@ class SessionModel {
     return raw < 0 ? 0 : raw.toDouble();
   }
 
-  double get timeCharge => (elapsedSeconds / 3600) * hourlyRate;
+// Seconds elapsed since the last split (or session start if no splits)
+  num get secondsSinceLastSplit {
+    if (splits.isEmpty) return elapsedSeconds;
+    final lastSplitAt = splits.last.splitAt;
+    final diff = DateTime.now().difference(lastSplitAt).inSeconds;
+    return diff < 0 ? 0 : diff;
+  }
+
+  // Total seconds the session was paused
+  double get pausedSeconds => totalPausedSeconds.toDouble();
+
+  // Seconds elapsed since the last split (or since session start if no splits yet)
+  num get currentLegSeconds {
+    if (splits.isEmpty) return elapsedSeconds;
+    final lastSplitAt = splits.last.splitAt;
+    final diff = DateTime.now().difference(lastSplitAt).inSeconds;
+    return diff < 0 ? 0 : diff;
+  }
+
+// Charge for the current leg only
+  double get currentLegCharge => (currentLegSeconds / 3600) * hourlyRate;
+
+// Charge for paused time (you can set a reduced rate — here 50% of hourly)
+// Change 0.5 to whatever rate you want, or 1.0 for full rate during pause
+  static const double pausedRateMultiplier = 1;
+  double get pausedTimeCharge =>
+      (pausedSeconds / 3600) * hourlyRate * pausedRateMultiplier;
+
+// Active (non-paused) seconds only
+  double get activeSeconds => elapsedSeconds - pausedSeconds;
+
+// Active time charge (only counts non-paused time)
+  double get activeTimeCharge => (activeSeconds / 3600) * hourlyRate;
+
+// Override timeCharge to include paused at reduced rate
+  double get timeCharge => activeTimeCharge + pausedTimeCharge;
 
   double get fbTotal => orderItems.fold(0, (sum, i) => sum + i.subtotal);
 
@@ -169,6 +245,9 @@ class SessionModel {
       status: d['status'] ?? 'active',
       openedBy: d['openedBy'] ?? '',
       venueId: d['venueId'] ?? '',
+      splits: ((d['splits'] as List?) ?? [])
+          .map((s) => SessionSplit.fromMap(s as Map<String, dynamic>))
+          .toList(),
     );
   }
 
@@ -187,6 +266,7 @@ class SessionModel {
         'status': status,
         'openedBy': openedBy,
         'venueId': venueId,
+        'splits': splits.map((s) => s.toMap()).toList(),
       };
 
   SessionModel copyWith({
@@ -205,6 +285,7 @@ class SessionModel {
     String? status,
     String? openedBy,
     String? venueId,
+    List<SessionSplit>? splits,
   }) =>
       SessionModel(
         id: id ?? this.id,
@@ -222,6 +303,7 @@ class SessionModel {
         status: status ?? this.status,
         openedBy: openedBy ?? this.openedBy,
         venueId: venueId ?? this.venueId,
+        splits: splits ?? this.splits,
       );
 }
 

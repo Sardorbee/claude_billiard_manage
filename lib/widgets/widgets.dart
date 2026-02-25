@@ -562,6 +562,7 @@ class TimerRing extends StatelessWidget {
   final int elapsedSeconds;
   final bool isPaused;
   final String timeLabel;
+  final String startedTime;
   final String subLabel;
 
   const TimerRing({
@@ -570,44 +571,41 @@ class TimerRing extends StatelessWidget {
     required this.isPaused,
     required this.timeLabel,
     required this.subLabel,
+    required this.startedTime,
   });
 
   @override
   Widget build(BuildContext context) {
-    final progress = (elapsedSeconds % 3600) / 3600;
     return SizedBox(
       width: 200,
-      height: 200,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          // Background ring
-          SizedBox(
-            width: 200,
-            height: 200,
-            child: CircularProgressIndicator(
-              value: 1,
-              strokeWidth: 6,
-              backgroundColor: AppTheme.border,
-              valueColor: const AlwaysStoppedAnimation(AppTheme.border),
-            ),
-          ),
-          // Progress ring
-          SizedBox(
-            width: 200,
-            height: 200,
-            child: CircularProgressIndicator(
-              value: progress,
-              strokeWidth: 6,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation(
-                  isPaused ? AppTheme.amber : AppTheme.green),
-            ),
-          ),
+
           // Center content
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Text(
+                    "Boshlangan vaqti:",
+                    style: const TextStyle(
+                        color: AppTheme.blue,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600),
+                  ),
+
+                  Text(
+                    startedTime,
+                    style: const TextStyle(
+                        color: AppTheme.blue,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
               if (isPaused)
                 const Icon(Icons.pause, color: AppTheme.amber, size: 20),
               Text(
@@ -627,6 +625,7 @@ class TimerRing extends StatelessWidget {
                     fontSize: 14,
                     fontWeight: FontWeight.w600),
               ),
+
             ],
           ),
         ],

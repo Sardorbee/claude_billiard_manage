@@ -127,6 +127,16 @@ class SessionRepository {
     });
   }
 
+  Future<void> addSplit(String venueId, String sessionId, SessionSplit split) async {
+    final sessionRef = _db
+        .collection('venues').doc(venueId)
+        .collection('sessions').doc(sessionId);
+
+    await sessionRef.update({
+      'splits': FieldValue.arrayUnion([split.toMap()]),
+    });
+  }
+
   Future<SessionModel> openSession({
     required String venueId,
     required TableModel table,
@@ -145,6 +155,7 @@ class SessionRepository {
       hourlyRate: table.hourlyRate,
       openedBy: openedBy,
       venueId: venueId,
+
     );
 
     // Firestore: full session doc
@@ -252,26 +263,36 @@ class SessionRepository {
     required String venueId,
     required String sessionId,
     required String tableId,
+    required SessionModel session,
     required double finalTotal,
   }) async {
     final now = DateTime.now();
-    final batch = _db.batch();
-
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
+    final tableRef   = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
+
+    final batch = _db.batch();
     batch.update(sessionRef, {
-      'status': 'completed',
-      'endedAt': Timestamp.fromDate(now),
-      'finalTotal': finalTotal,
+      'status':             'completed',
+      'endedAt':            Timestamp.fromDate(now),
+      'finalTotal':         finalTotal,
+      'totalPausedSeconds': session.totalPausedSeconds,  // ← save paused seconds
+    });
+    batch.update(tableRef, {
+      'status':           'open',
+      'currentSessionId': null,
     });
 
-    final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
-    batch.update(tableRef, {'status': 'open', 'currentSessionId': null});
+    // Run Firestore batch and RTDB removal in parallel
+    await Future.wait([
+      batch.commit(),
+      _liveRef(venueId, tableId).remove(),
+    ]);
 
-    await batch.commit();
-    await _liveRef(venueId, tableId).remove();
-
-    final doc = await sessionRef.get();
-    return SessionModel.fromFirestore(doc);
+    // Return locally — no extra Firestore read needed
+    return session.copyWith(
+      status:  'completed',
+      endedAt: now,
+    );
   }
 
   Future<void> voidSession(String venueId, String sessionId, String tableId) async {

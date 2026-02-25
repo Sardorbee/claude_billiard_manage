@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../blocs/blocs.dart';
 import '../../models/models.dart';
 import '../../theme/app_theme.dart';
@@ -148,26 +149,102 @@ class _ActiveSessionView extends StatelessWidget {
       ),
       body: CustomScrollView(
         slivers: [
+          // Splits history
+          if (session.splits.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SectionHeader('Splits (${session.splits.length})'),
+                    const SizedBox(height: 8),
+                    ...session.splits.asMap().entries.map((e) {
+                      final split = e.value;
+                      final idx = e.key + 1;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surface,
+                          border: Border.all(
+                              color: AppTheme.amber.withOpacity(0.35)),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            // Split number badge
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppTheme.amber.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Center(
+                                child: Text('$idx',
+                                    style: const TextStyle(
+                                        color: AppTheme.amber,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            // Payer name + time
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(split.payerName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14)),
+                                  Text(_formatTime(split.durationSeconds),
+                                      style: const TextStyle(
+                                          color: AppTheme.textMuted,
+                                          fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            // Charge
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('\$${split.timeCharge.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                        color: AppTheme.amber,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15)),
+                                const Text('time charge',
+                                    style: TextStyle(
+                                        color: AppTheme.textMuted,
+                                        fontSize: 10)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
           // Timer section
           SliverToBoxAdapter(
             child: Container(
               color: AppTheme.surface,
-              padding: const EdgeInsets.symmetric(vertical: 32),
+              padding: const EdgeInsets.symmetric(vertical: 5),
               child: Column(
                 children: [
-                  const Text('TIME ELAPSED',
-                      style: TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 10,
-                          letterSpacing: 0.15)),
-                  const SizedBox(height: 20),
                   TimerRing(
                     elapsedSeconds: state.elapsedSeconds,
                     isPaused: state.isPaused,
+                    startedTime:
+                        DateFormat('HH:mm').format(state.session.startedAt),
                     timeLabel: _formatTime(state.elapsedSeconds),
                     subLabel: '\$${state.currentTimeCharge.toStringAsFixed(2)}',
                   ),
-                  const SizedBox(height: 24),
+
                   // Quick actions
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -186,6 +263,12 @@ class _ActiveSessionView extends StatelessWidget {
                                 .add(SessionPauseRequested());
                           }
                         },
+                      ),
+                      _ActionButton(
+                        icon: Icons.call_split,
+                        label: 'SPLIT',
+                        color: AppTheme.amber,
+                        onTap: () => _showSplitSheet(context),
                       ),
                       _ActionButton(
                         icon: Icons.swap_horiz,
@@ -413,6 +496,22 @@ class _ActiveSessionView extends StatelessWidget {
     );
   }
 
+  void _showSplitSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+        side: BorderSide(color: AppTheme.border),
+      ),
+      builder: (_) => BlocProvider.value(
+        value: context.read<SessionBloc>(),
+        child: _SplitSheet(state: state),
+      ),
+    );
+  }
+
   void _showTransferSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -529,6 +628,13 @@ class _BottomBillingBar extends StatelessWidget {
   final SessionActive state;
   const _BottomBillingBar({required this.state});
 
+  String _fmt(int secs) {
+    final h = (secs ~/ 3600).toString().padLeft(2, '0');
+    final m = ((secs % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (secs % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -548,8 +654,12 @@ class _BottomBillingBar extends StatelessWidget {
                   child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _BillRow('Time',
-                      '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
+                  _BillRow('Active Time (${_fmt(state.activeSeconds)})',
+                      '\$${state.activeTimeCharge.toStringAsFixed(2)}'),
+                  if (state.pausedSeconds > 0)
+                    _BillRow('Paused Time (${_fmt(state.pausedSeconds)})',
+                        '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+                        color: AppTheme.amber),
                   _BillRow('F&B', '\$${state.fbTotal.toStringAsFixed(2)}'),
                   if (state.session.discount > 0)
                     _BillRow('Discount (${state.session.discount.toInt()}%)',
@@ -608,26 +718,34 @@ class _BottomBillingBar extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _DialogRow('Table', state.session.tableName),
-            _DialogRow('Time', formatTime(state.elapsedSeconds)),
-            _DialogRow('Time Charge',
-                '\$${state.currentTimeCharge.toStringAsFixed(2)}'),
-            _DialogRow('F&B', '\$${state.fbTotal.toStringAsFixed(2)}'),
+            _DialogRow('Umumiy vaqt', formatTime(state.elapsedSeconds)),
+            _DialogRow("O'ynalgan vaqt", formatTime(state.activeSeconds)),
+            _DialogRow("O'ynalgan summa",
+                '\$${state.activeTimeCharge.toStringAsFixed(2)}'),
+            if (state.pausedSeconds > 0) ...[
+              _DialogRow("To'xtatilgan vaqt", formatTime(state.pausedSeconds)),
+              _DialogRow("To'xtatilgan summa",
+                  '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+                  color: AppTheme.amber),
+            ],
+            _DialogRow("Qo'shimcha", '\$${state.fbTotal.toStringAsFixed(2)}'),
             if (state.session.discount > 0)
               _DialogRow(
                   'Discount', '-\$${state.discountAmount.toStringAsFixed(2)}'),
             const Divider(color: AppTheme.border),
-            _DialogRow('TOTAL', '\$${state.total.toStringAsFixed(2)}',
-                bold: true),
-            const SizedBox(height: 8),
-            const Row(
-              children: [
-                Icon(Icons.payments_outlined,
-                    color: AppTheme.textMuted, size: 14),
-                SizedBox(width: 6),
-                Text('Cash payment',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-              ],
+            _DialogRow(
+              "To'xtatilgan summa",
+              '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+              color: AppTheme.amber,
+              bold: true,
             ),
+            _DialogRow(
+              "O'ynalgan summa",
+              '\$${state.activeTimeCharge.toStringAsFixed(2)}',
+              bold: true,
+            ),
+            _DialogRow('Umumiy summa', '\$${state.total.toStringAsFixed(2)}',
+                bold: true),
           ],
         ),
         actions: [
@@ -674,7 +792,8 @@ class _DialogRow extends StatelessWidget {
   final String label;
   final String value;
   final bool bold;
-  const _DialogRow(this.label, this.value, {this.bold = false});
+  final Color? color; // ← add this
+  const _DialogRow(this.label, this.value, {this.bold = false, this.color});
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -684,14 +803,17 @@ class _DialogRow extends StatelessWidget {
           children: [
             Text(label,
                 style: TextStyle(
-                    color: bold ? AppTheme.textPrimary : AppTheme.textMuted,
-                    fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
-                    fontSize: bold ? 15 : 13)),
+                  color: bold ? AppTheme.textPrimary : AppTheme.textMuted,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
+                  fontSize: bold ? 15 : 13,
+                )),
             Text(value,
                 style: TextStyle(
-                    color: bold ? AppTheme.green : AppTheme.textPrimary,
-                    fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-                    fontSize: bold ? 15 : 13)),
+                  color:
+                      color ?? (bold ? AppTheme.green : AppTheme.textPrimary),
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: bold ? 15 : 13,
+                )),
           ],
         ),
       );
@@ -712,12 +834,14 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
 
   List<MenuItem> _filtered(List<MenuItem> all) {
     var items = all;
-    if (_category != null)
+    if (_category != null) {
       items = items.where((i) => i.category == _category).toList();
-    if (_search.isNotEmpty)
+    }
+    if (_search.isNotEmpty) {
       items = items
           .where((i) => i.name.toLowerCase().contains(_search.toLowerCase()))
           .toList();
+    }
     return items;
   }
 
@@ -910,6 +1034,207 @@ class _CategoryChip extends StatelessWidget {
       );
 }
 
+class _SplitSheet extends StatefulWidget {
+  final SessionActive state;
+  const _SplitSheet({required this.state});
+  @override
+  State<_SplitSheet> createState() => _SplitSheetState();
+}
+
+class _SplitSheetState extends State<_SplitSheet> {
+  final _nameCtrl = TextEditingController();
+
+  String _fmt(int secs) {
+    final h = (secs ~/ 3600).toString().padLeft(2, '0');
+    final m = ((secs % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (secs % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state;
+    final splitCount = s.session.splits.length + 1;
+    final legSeconds = s.currentLegSeconds;
+    final legCharge = s.currentLegCharge;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          24, 24, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.amber.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Icon(Icons.call_split,
+                    color: AppTheme.amber, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Split #$splitCount',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.w800)),
+                  const Text('Record loser for this leg',
+                      style:
+                          TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Current leg summary
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              border: Border.all(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    const Text('LEG DURATION',
+                        style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 9,
+                            letterSpacing: 0.1)),
+                    const SizedBox(height: 4),
+                    Text(_fmt(legSeconds),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 18)),
+                  ],
+                ),
+                Container(width: 1, height: 36, color: AppTheme.border),
+                Column(
+                  children: [
+                    const Text('LEG CHARGE',
+                        style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 9,
+                            letterSpacing: 0.1)),
+                    const SizedBox(height: 4),
+                    Text('\$${legCharge.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: AppTheme.amber)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Previous splits
+          if (s.session.splits.isNotEmpty) ...[
+            const Text('PREVIOUS SPLITS',
+                style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 10,
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            ...s.session.splits.asMap().entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 22,
+                        decoration: BoxDecoration(
+                          color: AppTheme.amber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Center(
+                          child: Text('${e.key + 1}',
+                              style: const TextStyle(
+                                  color: AppTheme.amber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(e.value.payerName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                      Text(_fmt(e.value.durationSeconds),
+                          style: const TextStyle(
+                              color: AppTheme.textMuted, fontSize: 12)),
+                      const SizedBox(width: 10),
+                      Text('\$${e.value.timeCharge.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                              color: AppTheme.amber,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                )),
+            const SizedBox(height: 16),
+          ],
+
+          // Loser name input
+          const Text('WHO PAYS THIS LEG?',
+              style: TextStyle(
+                  color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nameCtrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: const InputDecoration(
+              hintText: 'Enter loser\'s name...',
+              prefixIcon: Icon(Icons.person_outline, size: 18),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Confirm button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.amber,
+                foregroundColor: AppTheme.bg,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              onPressed: () {
+                final name = _nameCtrl.text.trim();
+                if (name.isEmpty) return;
+                context.read<SessionBloc>().add(SessionSplitRequested(name));
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.call_split, size: 18),
+              label: Text('RECORD SPLIT · \$${legCharge.toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _TransferSheet extends StatelessWidget {
   final String currentTableId;
   const _TransferSheet({required this.currentTableId});
@@ -1009,16 +1334,83 @@ class _ReceiptSheet extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           const Divider(color: AppTheme.border),
-          _DialogRow('Table', session.tableName),
-          _DialogRow('Duration', formatTime(session.elapsedSeconds.toInt())),
-          _DialogRow('Time', '\$${session.timeCharge.toStringAsFixed(2)}'),
-          _DialogRow('F&B', '\$${session.fbTotal.toStringAsFixed(2)}'),
+          ...session.splits.asMap().entries.map((e) {
+            final split = e.value;
+            final idx = e.key + 1;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.amber.withOpacity(0.15),
+                          border: Border.all(
+                              color: AppTheme.amber.withOpacity(0.4)),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: Text('SPLIT $idx',
+                            style: const TextStyle(
+                                color: AppTheme.amber,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(split.payerName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                    ],
+                  ),
+                ),
+                _DialogRow('Duration', formatTime(split.durationSeconds)),
+                _DialogRow(
+                    'Time Charge', '\$${split.timeCharge.toStringAsFixed(2)}',
+                    color: AppTheme.amber),
+                const Divider(color: AppTheme.border),
+              ],
+            );
+          }),
+
+          // Remaining (current/last) leg — whoever was playing when checkout happened
+          _DialogRow(
+              'Qolgan vaqt', formatTime(session.currentLegSeconds.toInt())),
+          _DialogRow('Qolgan vaqt summasi',
+              '\$${session.currentLegCharge.toStringAsFixed(2)}'),
+          _DialogRow("To'liq vaqt", formatTime(session.elapsedSeconds.toInt())),
+          _DialogRow(
+              "O'ynalgan vaqt",
+              formatTime((session.elapsedSeconds - session.totalPausedSeconds)
+                  .clamp(0, session.elapsedSeconds)
+                  .toInt())),
+          _DialogRow("O'ynalgan summa:",
+              '\$${session.activeTimeCharge.toStringAsFixed(2)}'),
+          if (session.totalPausedSeconds > 0) ...[
+            _DialogRow(
+                "To'xtatilgan vaqt:", formatTime(session.totalPausedSeconds)),
+            _DialogRow("To'xtatilgan summa:",
+                '\$${session.pausedTimeCharge.toStringAsFixed(2)}',
+                color: AppTheme.amber),
+          ],
+          _DialogRow("Qo'shimcha", '\$${session.fbTotal.toStringAsFixed(2)}'),
           if (session.discount > 0)
             _DialogRow('Discount (${session.discount.toInt()}%)',
                 '-\$${session.discountAmount.toStringAsFixed(2)}'),
           const Divider(color: AppTheme.border),
-          _DialogRow('TOTAL', '\$${session.total.toStringAsFixed(2)}',
-              bold: true),
+          _DialogRow("To'xtatilgan summa:",
+              '\$${session.pausedTimeCharge.toStringAsFixed(2)}',
+              color: AppTheme.amber, bold: true),
+          _DialogRow(
+            "O'ynalgan summa:",
+            '\$${session.activeTimeCharge.toStringAsFixed(2)}',
+            bold: true,
+          ),
+          if (session.totalPausedSeconds > 0)
+            _DialogRow('Umumiy summa', '\$${session.total.toStringAsFixed(2)}',
+                bold: true),
           const SizedBox(height: 24),
           Row(
             children: [
