@@ -62,7 +62,7 @@ class SessionScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 TextButton(
                     onPressed: () => context.pop(),
-                    child: const Text('Go back')),
+                    child: const Text('Orqaga')),
               ],
             )),
           );
@@ -138,7 +138,7 @@ class _ActiveSessionView extends StatelessWidget {
                       color: AppTheme.green, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
-                const Text('ACTIVE SESSION',
+                const Text('FAOL SEANS',
                     style: TextStyle(
                         color: AppTheme.green,
                         fontSize: 10,
@@ -152,12 +152,12 @@ class _ActiveSessionView extends StatelessWidget {
             color: AppTheme.surface2,
             onSelected: (val) => _handleMenu(context, val),
             itemBuilder: (_) => [
-              _menuItem('notes', Icons.note_outlined, 'Add Note'),
+              _menuItem('notes', Icons.note_outlined, "Izoh qo'shish"),
               if (user?.canApplyDiscount ?? false)
                 _menuItem(
-                    'discount', Icons.discount_outlined, 'Apply Discount'),
+                    'discount', Icons.discount_outlined, 'Chegirma berish'),
               if (user?.canVoid ?? false)
-                _menuItem('void', Icons.delete_outline, 'Void Session',
+                _menuItem('void', Icons.delete_outline, 'Seansni bekor qilish',
                     color: AppTheme.red),
             ],
           ),
@@ -173,7 +173,7 @@ class _ActiveSessionView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionHeader('Splits (${session.splits.length})'),
+                    SectionHeader("Bo'linishlar (${session.splits.length})"),
                     const SizedBox(height: 8),
                     ...session.splits.asMap().entries.map((e) {
                       final split = e.value;
@@ -226,12 +226,12 @@ class _ActiveSessionView extends StatelessWidget {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('\$${split.timeCharge.toStringAsFixed(2)}',
+                                Text(formatCurrency(split.timeCharge),
                                     style: const TextStyle(
                                         color: AppTheme.amber,
                                         fontWeight: FontWeight.w800,
                                         fontSize: 15)),
-                                const Text('time charge',
+                                const Text('vaqt haqi',
                                     style: TextStyle(
                                         color: AppTheme.textMuted,
                                         fontSize: 10)),
@@ -258,7 +258,7 @@ class _ActiveSessionView extends StatelessWidget {
                     startedTime:
                         DateFormat('HH:mm').format(state.session.startedAt),
                     timeLabel: _formatTime(state.elapsedSeconds),
-                    subLabel: '\$${state.currentTimeCharge.toStringAsFixed(2)}',
+                    subLabel: formatCurrency(state.currentTimeCharge),
                   ),
 
                   // Quick actions
@@ -267,7 +267,7 @@ class _ActiveSessionView extends StatelessWidget {
                     children: [
                       _ActionButton(
                         icon: state.isPaused ? Icons.play_arrow : Icons.pause,
-                        label: state.isPaused ? 'RESUME' : 'PAUSE',
+                        label: state.isPaused ? 'DAVOM' : "TO'XTATISH",
                         onTap: () {
                           if (state.isPaused) {
                             context
@@ -282,23 +282,23 @@ class _ActiveSessionView extends StatelessWidget {
                       ),
                       _ActionButton(
                         icon: Icons.call_split,
-                        label: 'SPLIT',
+                        label: "BO'LISH",
                         color: AppTheme.amber,
                         onTap: () => _showSplitSheet(context),
                       ),
                       _ActionButton(
                         icon: Icons.swap_horiz,
-                        label: 'TRANSFER',
+                        label: "KO'CHIRISH",
                         onTap: () => _showTransferSheet(context),
                       ),
                       _ActionButton(
                         icon: Icons.note_add_outlined,
-                        label: 'NOTE',
+                        label: 'IZOH',
                         onTap: () => _handleMenu(context, 'notes'),
                       ),
                       _ActionButton(
                         icon: Icons.add_shopping_cart_outlined,
-                        label: 'ADD ITEM',
+                        label: "QO'SHISH",
                         color: AppTheme.green,
                         onTap: () => _showAddItemsSheet(context),
                       ),
@@ -315,7 +315,7 @@ class _ActiveSessionView extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                 child:
-                    SectionHeader('Tab Items (${session.orderItems.length})'),
+                    SectionHeader('Buyurtmalar (${session.orderItems.length})'),
               ),
             ),
             SliverList(
@@ -400,24 +400,24 @@ class _ActiveSessionView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Session Notes'),
+        title: const Text('Seans izohi'),
         content: TextField(
           controller: ctrl,
           maxLines: 4,
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration:
-              const InputDecoration(hintText: 'Add notes for this session...'),
+              const InputDecoration(hintText: 'Seans uchun izoh yozing...'),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(_), child: const Text('Bekor qilish')),
           ElevatedButton(
             onPressed: () {
               context.read<SessionBloc>().add(SessionNotesUpdated(ctrl.text));
               Navigator.pop(_);
             },
-            child: const Text('Save'),
+            child: const Text('Saqlash'),
           ),
         ],
       ),
@@ -436,7 +436,7 @@ class _ActiveSessionView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Apply Discount',
+              const Text('Chegirma berish',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 24),
               Row(
@@ -477,7 +477,7 @@ class _ActiveSessionView extends StatelessWidget {
                         .add(SessionDiscountApplied(discount));
                     Navigator.pop(_);
                   },
-                  child: Text('APPLY ${discount.toInt()}% DISCOUNT'),
+                  child: Text('${discount.toInt()}% CHEGIRMA BERISH'),
                 ),
               ),
             ],
@@ -491,12 +491,12 @@ class _ActiveSessionView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Void Session?'),
+        title: const Text('Seans bekor qilinsinmi?'),
         content: const Text(
-            'This will cancel the session and free the table. This action cannot be undone.'),
+            "Seans bekor qilinadi va stol bo'shatiladi. Bu amalni qaytarib bo'lmaydi."),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(_), child: const Text('Bekor qilish')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.red,
@@ -505,7 +505,7 @@ class _ActiveSessionView extends StatelessWidget {
               context.read<SessionBloc>().add(SessionVoidRequested());
               Navigator.pop(_);
             },
-            child: const Text('VOID'),
+            child: const Text('BEKOR QILISH'),
           ),
         ],
       ),
@@ -631,12 +631,12 @@ class _OrderItemRow extends StatelessWidget {
               Text(item.name,
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 14)),
-              Text('\$${item.unitPrice.toStringAsFixed(2)} × ${item.quantity}',
+              Text('${formatCurrency(item.unitPrice)} × ${item.quantity}',
                   style:
                       const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             ],
           )),
-          Text('\$${item.subtotal.toStringAsFixed(2)}',
+          Text(formatCurrency(item.subtotal),
               style: const TextStyle(
                   color: AppTheme.green,
                   fontWeight: FontWeight.w700,
@@ -677,28 +677,28 @@ class _BottomBillingBar extends StatelessWidget {
                   child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _BillRow('Active Time (${_fmt(state.activeSeconds)})',
-                      '\$${state.activeTimeCharge.toStringAsFixed(2)}'),
+                  _BillRow("O'ynalgan vaqt (${_fmt(state.activeSeconds)})",
+                      formatCurrency(state.activeTimeCharge)),
                   if (state.pausedSeconds > 0)
-                    _BillRow('Paused Time (${_fmt(state.pausedSeconds)})',
-                        '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+                    _BillRow("To'xtatilgan vaqt (${_fmt(state.pausedSeconds)})",
+                        formatCurrency(state.pausedTimeCharge),
                         color: AppTheme.amber),
-                  _BillRow('F&B', '\$${state.fbTotal.toStringAsFixed(2)}'),
+                  _BillRow('Mahsulotlar', formatCurrency(state.fbTotal)),
                   if (state.session.discount > 0)
-                    _BillRow('Discount (${state.session.discount.toInt()}%)',
-                        '-\$${state.discountAmount.toStringAsFixed(2)}',
+                    _BillRow('Chegirma (${state.session.discount.toInt()}%)',
+                        '-${formatCurrency(state.discountAmount)}',
                         color: AppTheme.green),
                 ],
               )),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('TOTAL BALANCE',
+                  const Text('JAMI SUMMA',
                       style: TextStyle(
                           color: AppTheme.textMuted,
                           fontSize: 9,
                           letterSpacing: 0.1)),
-                  Text('\$${state.total.toStringAsFixed(2)}',
+                  Text(formatCurrency(state.total),
                       style: const TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -716,7 +716,7 @@ class _BottomBillingBar extends StatelessWidget {
               onPressed: () => _showCheckoutConfirm(context),
               icon: const Icon(Icons.check_circle_outline, size: 18),
               label: Text(
-                  'CHECKOUT & CLEAR · \$${state.total.toStringAsFixed(2)}',
+                  'HISOBNI YOPISH · ${formatCurrency(state.total)}',
                   style: const TextStyle(
                       fontWeight: FontWeight.w800, letterSpacing: 0.05)),
               style: ElevatedButton.styleFrom(
@@ -741,38 +741,38 @@ class _BottomBillingBar extends StatelessWidget {
     final choice = await showDialog<PaymentChoice>(
       context: context,
       builder: (_) => PaymentDialog(
-        title: 'Confirm Checkout',
-        confirmLabel: 'CONFIRM CHECKOUT',
+        title: 'Hisobni yopish',
+        confirmLabel: 'TASDIQLASH',
         debtorNames: debtorNames,
         summary: [
-            _DialogRow('Table', state.session.tableName),
+            _DialogRow('Stol', state.session.tableName),
             _DialogRow('Umumiy vaqt', formatTime(state.elapsedSeconds)),
             _DialogRow("O'ynalgan vaqt", formatTime(state.activeSeconds)),
             _DialogRow("O'ynalgan summa",
-                '\$${state.activeTimeCharge.toStringAsFixed(2)}'),
+                formatCurrency(state.activeTimeCharge)),
             if (state.pausedSeconds > 0) ...[
               _DialogRow("To'xtatilgan vaqt", formatTime(state.pausedSeconds)),
               _DialogRow("To'xtatilgan summa",
-                  '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+                  formatCurrency(state.pausedTimeCharge),
                   color: AppTheme.amber),
             ],
-            _DialogRow("Qo'shimcha", '\$${state.fbTotal.toStringAsFixed(2)}'),
+            _DialogRow("Qo'shimcha", formatCurrency(state.fbTotal)),
             if (state.session.discount > 0)
               _DialogRow(
-                  'Discount', '-\$${state.discountAmount.toStringAsFixed(2)}'),
+                  'Chegirma', '-${formatCurrency(state.discountAmount)}'),
             const Divider(color: AppTheme.border),
             _DialogRow(
               "To'xtatilgan summa",
-              '\$${state.pausedTimeCharge.toStringAsFixed(2)}',
+              formatCurrency(state.pausedTimeCharge),
               color: AppTheme.amber,
               bold: true,
             ),
             _DialogRow(
               "O'ynalgan summa",
-              '\$${state.activeTimeCharge.toStringAsFixed(2)}',
+              formatCurrency(state.activeTimeCharge),
               bold: true,
             ),
-            _DialogRow('Umumiy summa', '\$${state.total.toStringAsFixed(2)}',
+            _DialogRow('Umumiy summa', formatCurrency(state.total),
                 bold: true),
         ],
       ),
@@ -849,8 +849,8 @@ class AddItemsSheet extends StatefulWidget {
     super.key,
     required this.controller,
     required this.onConfirm,
-    this.title = 'ADD TO TABLE',
-    this.subtitle = 'Select items for current session',
+    this.title = "STOLGA QO'SHISH",
+    this.subtitle = 'Seans uchun mahsulot tanlang',
   });
   @override
   State<AddItemsSheet> createState() => _AddItemsSheetState();
@@ -907,7 +907,7 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                     controller: _searchCtrl,
                     onChanged: (q) => setState(() => _search = q),
                     decoration: const InputDecoration(
-                      hintText: 'Search consumables...',
+                      hintText: 'Mahsulot qidirish...',
                       prefixIcon: Icon(Icons.search, size: 18),
                       contentPadding: EdgeInsets.symmetric(vertical: 10),
                     ),
@@ -919,7 +919,7 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                     child: Row(
                       children: [
                         _CategoryChip(
-                            label: 'All',
+                            label: 'Hammasi',
                             selected: _category == null,
                             onTap: () => setState(() => _category = null)),
                         ...categories.map((c) => _CategoryChip(
@@ -978,13 +978,13 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('DRAFT ORDER',
+                          Text('BUYURTMA',
                               style: TextStyle(
                                   color: AppTheme.textMuted.withOpacity(0.8),
                                   fontSize: 9,
                                   letterSpacing: 0.1)),
                           Text(
-                              '$_totalItems item${_totalItems > 1 ? 's' : ''} · \$${_cartTotal(allItems).toStringAsFixed(2)}',
+                              '$_totalItems ta · ${formatCurrency(_cartTotal(allItems))}',
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700, fontSize: 15)),
                         ],
@@ -993,7 +993,7 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                     ElevatedButton.icon(
                       onPressed: () => _confirmOrder(context, allItems),
                       icon: const Icon(Icons.check, size: 16),
-                      label: const Text('CONFIRM'),
+                      label: const Text('TASDIQLASH'),
                     ),
                   ],
                 ),
@@ -1117,10 +1117,10 @@ class _SplitSheetState extends State<_SplitSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Split #$splitCount',
+                  Text("Bo'linish #$splitCount",
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.w800)),
-                  const Text('Record loser for this leg',
+                  const Text('Bu qism uchun yutqazganni yozing',
                       style:
                           TextStyle(color: AppTheme.textMuted, fontSize: 12)),
                 ],
@@ -1142,7 +1142,7 @@ class _SplitSheetState extends State<_SplitSheet> {
               children: [
                 Column(
                   children: [
-                    const Text('LEG DURATION',
+                    const Text('QISM VAQTI',
                         style: TextStyle(
                             color: AppTheme.textMuted,
                             fontSize: 9,
@@ -1156,13 +1156,13 @@ class _SplitSheetState extends State<_SplitSheet> {
                 Container(width: 1, height: 36, color: AppTheme.border),
                 Column(
                   children: [
-                    const Text('LEG CHARGE',
+                    const Text('QISM SUMMASI',
                         style: TextStyle(
                             color: AppTheme.textMuted,
                             fontSize: 9,
                             letterSpacing: 0.1)),
                     const SizedBox(height: 4),
-                    Text('\$${legCharge.toStringAsFixed(2)}',
+                    Text(formatCurrency(legCharge),
                         style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 18,
@@ -1176,7 +1176,7 @@ class _SplitSheetState extends State<_SplitSheet> {
 
           // Previous splits
           if (s.session.splits.isNotEmpty) ...[
-            const Text('PREVIOUS SPLITS',
+            const Text("OLDINGI BO'LINISHLAR",
                 style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 10,
@@ -1211,7 +1211,7 @@ class _SplitSheetState extends State<_SplitSheet> {
                           style: const TextStyle(
                               color: AppTheme.textMuted, fontSize: 12)),
                       const SizedBox(width: 10),
-                      Text('\$${e.value.timeCharge.toStringAsFixed(2)}',
+                      Text(formatCurrency(e.value.timeCharge),
                           style: const TextStyle(
                               color: AppTheme.amber,
                               fontWeight: FontWeight.w700)),
@@ -1222,7 +1222,7 @@ class _SplitSheetState extends State<_SplitSheet> {
           ],
 
           // Loser name input
-          const Text('WHO PAYS THIS LEG?',
+          const Text("BU QISMNI KIM TO'LAYDI?",
               style: TextStyle(
                   color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
           const SizedBox(height: 8),
@@ -1232,7 +1232,7 @@ class _SplitSheetState extends State<_SplitSheet> {
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: const InputDecoration(
-              hintText: 'Enter loser\'s name...',
+              hintText: 'Yutqazgan ismi...',
               prefixIcon: Icon(Icons.person_outline, size: 18),
             ),
           ),
@@ -1254,7 +1254,7 @@ class _SplitSheetState extends State<_SplitSheet> {
                 Navigator.pop(context);
               },
               icon: const Icon(Icons.call_split, size: 18),
-              label: Text('RECORD SPLIT · \$${legCharge.toStringAsFixed(2)}',
+              label: Text("BO'LISHNI YOZISH · ${formatCurrency(legCharge)}",
                   style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
           ),
@@ -1283,14 +1283,14 @@ class _TransferSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Transfer Session',
+              const Text("Seansni ko'chirish",
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              const Text('Select destination table',
+              const Text('Qaysi stolga?',
                   style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
               const SizedBox(height: 20),
               if (openTables.isEmpty)
                 const Center(
-                    child: Text('No open tables available',
+                    child: Text("Bo'sh stol yo'q",
                         style: TextStyle(color: AppTheme.textMuted)))
               else
                 ...openTables.map((t) => ListTile(
@@ -1352,10 +1352,10 @@ class _ReceiptSheet extends StatelessWidget {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Session Completed',
+                  Text('Seans yopildi',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text('Table is now free',
+                  Text("Stol bo'shadi",
                       style: TextStyle(color: AppTheme.green, fontSize: 12)),
                 ],
               ),
@@ -1382,7 +1382,7 @@ class _ReceiptSheet extends StatelessWidget {
                               color: AppTheme.amber.withOpacity(0.4)),
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Text('SPLIT $idx',
+                        child: Text("BO'LINISH $idx",
                             style: const TextStyle(
                                 color: AppTheme.amber,
                                 fontSize: 9,
@@ -1395,9 +1395,9 @@ class _ReceiptSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                _DialogRow('Duration', formatTime(split.durationSeconds)),
+                _DialogRow('Davomiyligi', formatTime(split.durationSeconds)),
                 _DialogRow(
-                    'Time Charge', '\$${split.timeCharge.toStringAsFixed(2)}',
+                    'Vaqt haqi', formatCurrency(split.timeCharge),
                     color: AppTheme.amber),
                 const Divider(color: AppTheme.border),
               ],
@@ -1408,7 +1408,7 @@ class _ReceiptSheet extends StatelessWidget {
           _DialogRow(
               'Qolgan vaqt', formatTime(session.currentLegSeconds.toInt())),
           _DialogRow('Qolgan vaqt summasi',
-              '\$${session.currentLegCharge.toStringAsFixed(2)}'),
+              formatCurrency(session.currentLegCharge)),
           _DialogRow("To'liq vaqt", formatTime(session.elapsedSeconds.toInt())),
           _DialogRow(
               "O'ynalgan vaqt",
@@ -1416,29 +1416,29 @@ class _ReceiptSheet extends StatelessWidget {
                   .clamp(0, session.elapsedSeconds)
                   .toInt())),
           _DialogRow("O'ynalgan summa:",
-              '\$${session.activeTimeCharge.toStringAsFixed(2)}'),
+              formatCurrency(session.activeTimeCharge)),
           if (session.totalPausedSeconds > 0) ...[
             _DialogRow(
                 "To'xtatilgan vaqt:", formatTime(session.totalPausedSeconds)),
             _DialogRow("To'xtatilgan summa:",
-                '\$${session.pausedTimeCharge.toStringAsFixed(2)}',
+                formatCurrency(session.pausedTimeCharge),
                 color: AppTheme.amber),
           ],
-          _DialogRow("Qo'shimcha", '\$${session.fbTotal.toStringAsFixed(2)}'),
+          _DialogRow("Qo'shimcha", formatCurrency(session.fbTotal)),
           if (session.discount > 0)
-            _DialogRow('Discount (${session.discount.toInt()}%)',
-                '-\$${session.discountAmount.toStringAsFixed(2)}'),
+            _DialogRow('Chegirma (${session.discount.toInt()}%)',
+                '-${formatCurrency(session.discountAmount)}'),
           const Divider(color: AppTheme.border),
           _DialogRow("To'xtatilgan summa:",
-              '\$${session.pausedTimeCharge.toStringAsFixed(2)}',
+              formatCurrency(session.pausedTimeCharge),
               color: AppTheme.amber, bold: true),
           _DialogRow(
             "O'ynalgan summa:",
-            '\$${session.activeTimeCharge.toStringAsFixed(2)}',
+            formatCurrency(session.activeTimeCharge),
             bold: true,
           ),
           _DialogRow(
-              'Umumiy summa', '\$${session.paidTotal.toStringAsFixed(2)}',
+              'Umumiy summa', formatCurrency(session.paidTotal),
               bold: true),
           if (session.paymentMethod != null)
             _DialogRow(
@@ -1447,23 +1447,12 @@ class _ReceiptSheet extends StatelessWidget {
                     ? '${paymentLabel(session.paymentMethod!)} · ${session.debtorName ?? ''}'
                     : paymentLabel(session.paymentMethod!)),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: onDone,
-                  child: const Text('CLOSE'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: onDone,
-                  icon: const Icon(Icons.print_outlined, size: 16),
-                  label: const Text('PRINT'),
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: onDone,
+              child: const Text('YOPISH'),
+            ),
           ),
         ],
       ),

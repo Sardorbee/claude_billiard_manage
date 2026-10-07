@@ -83,7 +83,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       if (user != null) {
         emit(AuthAuthenticated(user));
       } else {
-        emit(const AuthError('User not found'));
+        emit(const AuthError('Foydalanuvchi topilmadi'));
       }
     } catch (e) {
       emit(AuthError(e.toString().replaceAll('Exception:', '').trim()));
@@ -375,7 +375,7 @@ class SessionActive extends SessionState {
 // Total = whole-session time (active + paused) + F&B - discount. Splits only
 // divide the time between payers, so they are not added on top.
   double get total =>
-      (subtotal - discountAmount).clamp(0, double.infinity).toDouble();
+      (subtotal - discountAmount).clamp(0, double.infinity).roundToDouble();
 
   int get activeSeconds => elapsedSeconds - pausedSeconds;
 

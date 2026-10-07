@@ -79,15 +79,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Text('THE FLOOR',
                                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -0.5)),
-                                Text('BILLIARD MANAGEMENT', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, letterSpacing: 0.15)),
+                                Text('BILYARD BOSHQARUVI', style: TextStyle(fontSize: 9, color: AppTheme.textMuted, letterSpacing: 0.15)),
                               ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 48),
-                        const Text('Sign In', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -0.5)),
+                        const Text('Kirish', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppTheme.textPrimary, letterSpacing: -0.5)),
                         const SizedBox(height: 4),
-                        const Text('Enter your credentials to continue', style: TextStyle(color: AppTheme.textMuted, fontSize: 14)),
+                        const Text("Davom etish uchun ma'lumotlaringizni kiriting", style: TextStyle(color: AppTheme.textMuted, fontSize: 14)),
                         const SizedBox(height: 32),
                         // Email
                         TextFormField(
@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           obscureText: _obscure,
                           style: const TextStyle(color: AppTheme.textPrimary),
                           decoration: InputDecoration(
-                            labelText: 'Password',
+                            labelText: 'Parol',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: GestureDetector(
                               onTap: () => setState(() => _obscure = !_obscure),
@@ -120,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           alignment: Alignment.centerRight,
                           child: TextButton(
                             onPressed: _forgotPassword,
-                            child: const Text('Forgot password?', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                            child: const Text('Parolni unutdingizmi?', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -131,7 +131,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: state is AuthLoading
                                 ? const SizedBox(height: 18, width: 18,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.bg))
-                                : const Text('SIGN IN', style: TextStyle(letterSpacing: 0.1)),
+                                : const Text('KIRISH', style: TextStyle(letterSpacing: 0.1)),
                           ),
                         ),
                         const SizedBox(height: 48),
@@ -155,17 +155,17 @@ class _LoginScreenState extends State<LoginScreen> {
     final messenger = ScaffoldMessenger.of(context);
     if (email.isEmpty) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Enter your email first'),
+          content: Text('Avval emailni kiriting'),
           backgroundColor: AppTheme.red));
       return;
     }
     try {
       await context.read<AuthRepository>().resetPassword(email);
       messenger.showSnackBar(
-          SnackBar(content: Text('Password reset link sent to $email')));
+          SnackBar(content: Text('Parolni tiklash havolasi $email ga yuborildi')));
     } on FirebaseAuthException catch (e) {
       messenger.showSnackBar(SnackBar(
-          content: Text(e.message ?? 'Could not send the reset link'),
+          content: Text(e.message ?? "Havolani yuborib bo'lmadi"),
           backgroundColor: AppTheme.red));
     }
   }

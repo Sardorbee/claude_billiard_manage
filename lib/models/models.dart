@@ -236,7 +236,8 @@ class SessionModel {
   // Table time after the discount: the "table time" line of a report.
   double get netTimeCharge => timeCharge - discountAmount;
 
-  double get total => subtotal - discountAmount;
+  // Charged in whole so'm.
+  double get total => (subtotal - discountAmount).roundToDouble();
 
   // The amount actually charged; older sessions without one fall back to
   // the calculated total.

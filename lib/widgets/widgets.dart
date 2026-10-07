@@ -10,6 +10,22 @@ class StatusBadge extends StatelessWidget {
   final bool dot;
   const StatusBadge(this.status, {super.key, this.dot = false});
 
+  // Statuses and roles arrive as their stored English names.
+  static const _labels = {
+    'active': 'FAOL',
+    'reserved': 'BAND',
+    'maintenance': "TA'MIRDA",
+    'open': "BO'SH",
+    'completed': 'YOPILGAN',
+    'cancelled': 'BEKOR QILINGAN',
+    'no_show': 'KELMADI',
+    'confirmed': 'TASDIQLANGAN',
+    'staff': 'XODIM',
+    'supervisor': 'NAZORATCHI',
+    'manager': 'MENEJER',
+    'owner': 'EGASI',
+  };
+
   Color get color {
     switch (status) {
       case 'active':
@@ -56,7 +72,7 @@ class StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(2),
       ),
       child: Text(
-        status.toUpperCase(),
+        _labels[status] ?? status.toUpperCase(),
         style: TextStyle(
           color: color,
           fontSize: 10,
@@ -151,7 +167,7 @@ class _OpenContent extends StatelessWidget {
     return const Center(
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('OPEN',
+        child: Text("BO'SH",
             style: TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 13,
@@ -191,7 +207,7 @@ class _ActiveContent extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '\$${total.toStringAsFixed(2)}',
+          formatCurrency(total),
           style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         ),
       ],
@@ -206,7 +222,7 @@ class _ReservedContent extends StatelessWidget {
       children: [
         Icon(Icons.schedule, color: AppTheme.amber, size: 14),
         SizedBox(width: 6),
-        Text('RESERVED',
+        Text('BAND',
             style: TextStyle(
                 color: AppTheme.amber,
                 fontSize: 12,
@@ -223,7 +239,7 @@ class _MaintenanceContent extends StatelessWidget {
       children: [
         Icon(Icons.build, color: AppTheme.red, size: 14),
         SizedBox(width: 6),
-        Text('MAINTENANCE',
+        Text("TA'MIRDA",
             style: TextStyle(
                 color: AppTheme.red,
                 fontSize: 12,
@@ -374,7 +390,7 @@ class MenuItemCard extends StatelessWidget {
                     Container(
                       color: Colors.black54,
                       alignment: Alignment.center,
-                      child: const Text('OUT OF\nSTOCK',
+                      child: const Text('TUGAGAN',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               color: AppTheme.red,
@@ -403,7 +419,7 @@ class MenuItemCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '\$${item.price.toStringAsFixed(2)}',
+                        formatCurrency(item.price),
                         style: const TextStyle(
                             color: AppTheme.green,
                             fontSize: 12,
@@ -513,15 +529,15 @@ class AppBottomNav extends StatelessWidget {
         elevation: 0,
         items: [
           const BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded), label: 'Floor'),
+              icon: Icon(Icons.grid_view_rounded), label: 'Zal'),
           const BottomNavigationBarItem(
               icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
           const BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
+              icon: Icon(Icons.bar_chart_rounded), label: 'Hisobot'),
           if (isAdmin)
             const BottomNavigationBarItem(
                 icon: Icon(Icons.admin_panel_settings_outlined),
-                label: 'Admin'),
+                label: 'Boshqaruv'),
         ],
       ),
     );
@@ -636,8 +652,34 @@ class TimerRing extends StatelessWidget {
 
 // ─── CURRENCY FORMATTER ───────────────────────────────────────────────────────
 
-String formatCurrency(double amount, {String symbol = '\$'}) =>
-    '$symbol${amount.toStringAsFixed(2)}';
+// Whole so'm with a space between thousands: 35 000 so'm.
+String formatCurrency(double amount) {
+  final whole = amount.round();
+  final digits = whole.abs().toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
+  return "${whole < 0 ? '-' : ''}$digits so'm";
+}
+
+// Short form for chart axes: 35 ming, 1.2 mln.
+String formatCompact(double amount) {
+  if (amount.abs() >= 1000000) {
+    return '${(amount / 1000000).toStringAsFixed(1)} mln';
+  }
+  if (amount.abs() >= 1000) return '${(amount / 1000).round()} ming';
+  return '${amount.round()}';
+}
+
+String tableTypeLabel(TableType type) => switch (type) {
+      TableType.billiard => 'Bilyard',
+      TableType.ps => 'PlayStation',
+    };
+
+String roleLabel(UserRole role) => switch (role) {
+      UserRole.staff => 'Xodim',
+      UserRole.supervisor => 'Nazoratchi',
+      UserRole.manager => 'Menejer',
+      UserRole.owner => 'Egasi',
+    };
 
 String formatTime(int seconds) {
   final h = (seconds ~/ 3600).toString().padLeft(2, '0');
@@ -646,8 +688,9 @@ String formatTime(int seconds) {
   return '$h:$m:$s';
 }
 
-String formatDate(DateTime dt) => DateFormat('MMM d, yyyy · h:mm a').format(dt);
-String formatTimeOnly(DateTime dt) => DateFormat('h:mm a').format(dt);
+// Numeric dates need no locale data and read the same in Uzbek.
+String formatDate(DateTime dt) => DateFormat('dd.MM.yyyy · HH:mm').format(dt);
+String formatTimeOnly(DateTime dt) => DateFormat('HH:mm').format(dt);
 
 // ─── Payment dialog ──────────────────────────────────────────────────────────
 
@@ -790,7 +833,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            child: const Text('Bekor qilish')),
         ElevatedButton(
             onPressed: _confirm, child: Text(widget.confirmLabel)),
       ],

@@ -200,7 +200,7 @@ class TableRepository {
 // ─── SESSION REPOSITORY ───────────────────────────────────────────────────────
 
 class SessionRepository {
-  static const counterSaleName = 'Counter';
+  static const counterSaleName = 'Stolsiz savdo';
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final DebtRepository _debts;
@@ -266,7 +266,7 @@ class SessionRepository {
       final tableSnap = await tx.get(tableRef);
       final t = tableSnap.data();
       if (t != null && t['status'] == 'active' && t['currentSessionId'] != null) {
-        throw Exception('${table.name} already has an active session');
+        throw Exception('${table.name} stolida faol seans bor');
       }
       tx.set(sessionRef, session.toFirestore());
       tx.update(tableRef, {'status': 'active', 'currentSessionId': sessionId});
@@ -340,7 +340,7 @@ class SessionRepository {
     await _db.runTransaction((tx) async {
       final to = (await tx.get(toRef)).data();
       if (to != null && to['status'] == 'active' && to['currentSessionId'] != null) {
-        throw Exception('$toTableName already has an active session');
+        throw Exception('$toTableName stolida faol seans bor');
       }
       final fromName = (await tx.get(sessionRef)).data()?['tableName'] ?? '';
       tx.update(sessionRef, {'tableId': toTableId, 'tableName': toTableName});
@@ -444,7 +444,7 @@ class SessionRepository {
   Future<void> _ensureActive(Transaction tx, DocumentReference<Map<String, dynamic>> sessionRef) async {
     final status = (await tx.get(sessionRef)).data()?['status'];
     if (status != 'active') {
-      throw Exception('This session is already ${status ?? 'closed'}');
+      throw Exception('Bu seans allaqachon yopilgan');
     }
   }
 
@@ -831,7 +831,7 @@ class DebtRepository {
     await _db.runTransaction((tx) async {
       final balance = ((await tx.get(customerRef)).data()?['balance'] ?? 0).toDouble();
       if (amount > balance) {
-        throw Exception('${customer.name} only owes ${balance.toStringAsFixed(2)}');
+        throw Exception("${customer.name} qarzi faqat ${_money(balance)} so'm");
       }
       await applyEntry(tx,
           venueId: venueId,

@@ -366,10 +366,10 @@ class _CustomerPageState extends State<_CustomerPage> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+              child: const Text('Bekor qilish')),
           ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('SAVE')),
+              child: const Text('SAQLASH')),
         ],
       ),
     );
@@ -542,8 +542,8 @@ class _ReduceDialogState extends State<_ReduceDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        ElevatedButton(onPressed: _confirm, child: const Text('SAVE')),
+            child: const Text('Bekor qilish')),
+        ElevatedButton(onPressed: _confirm, child: const Text('SAQLASH')),
       ],
     );
   }

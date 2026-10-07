@@ -34,7 +34,7 @@ class _AdminScreenState extends State<AdminScreen>
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Admin'),
+        title: const Text('Boshqaruv'),
         bottom: TabBar(
           controller: _tab,
           labelColor: AppTheme.green,
@@ -44,9 +44,9 @@ class _AdminScreenState extends State<AdminScreen>
           isScrollable: true,
           tabAlignment: TabAlignment.start,
           tabs: const [
-            Tab(text: 'TABLES'),
-            Tab(text: 'MENU'),
-            Tab(text: 'STAFF'),
+            Tab(text: 'STOLLAR'),
+            Tab(text: 'MENYU'),
+            Tab(text: 'XODIMLAR'),
             Tab(text: 'JURNAL'),
             Tab(text: 'SOZLAMALAR'),
           ],
@@ -99,18 +99,18 @@ class _TablesTab extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _TableStat('TOTAL', '${state.allTables.length}',
+                    _TableStat('JAMI', '${state.allTables.length}',
                         AppTheme.textPrimary),
                     _TableStat(
-                        'ACTIVE',
+                        'FAOL',
                         '${state.allTables.where((t) => t.status == TableStatus.active).length}',
                         AppTheme.green),
                     _TableStat(
-                        'OPEN',
+                        "BO'SH",
                         '${state.allTables.where((t) => t.status == TableStatus.open).length}',
                         AppTheme.textMuted),
                     _TableStat(
-                        'RESERVED',
+                        'BAND',
                         '${state.allTables.where((t) => t.status == TableStatus.reserved).length}',
                         AppTheme.amber),
                   ],
@@ -192,7 +192,7 @@ class _AdminTableRow extends StatelessWidget {
                 Text(table.name,
                     style: const TextStyle(fontWeight: FontWeight.w700)),
                 Text(
-                    '${table.zone} · ${table.type.name} · \$${table.hourlyRate.toStringAsFixed(2)}/hr',
+                    '${table.zone} · ${tableTypeLabel(table.type)} · ${formatCurrency(table.hourlyRate)}/soat',
                     style: const TextStyle(
                         color: AppTheme.textMuted, fontSize: 12)),
               ],
@@ -204,12 +204,12 @@ class _AdminTableRow extends StatelessWidget {
             color: AppTheme.surface2,
             onSelected: (v) => _handleAction(context, v),
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              const PopupMenuItem(value: 'edit', child: Text('Tahrirlash')),
               const PopupMenuItem(
-                  value: 'maintenance', child: Text('Toggle Maintenance')),
+                  value: 'maintenance', child: Text("Ta'mirga qo'yish / chiqarish")),
               PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: AppTheme.red))),
+                  child: Text("O'chirish", style: TextStyle(color: AppTheme.red))),
             ],
           ),
         ],
@@ -238,13 +238,13 @@ class _AdminTableRow extends StatelessWidget {
         showDialog(
             context: context,
             builder: (_) => AlertDialog(
-                  title: const Text('Delete Table?'),
+                  title: const Text("Stol o'chirilsinmi?"),
                   content:
-                      Text('${table.name} will be removed from the floor.'),
+                      Text('${table.name} zaldan olib tashlanadi.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(_),
-                        child: const Text('Cancel')),
+                        child: const Text('Bekor qilish')),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.red),
@@ -254,7 +254,7 @@ class _AdminTableRow extends StatelessWidget {
                             .deleteTable(user.venueId, table);
                         Navigator.pop(_);
                       },
-                      child: const Text('DELETE'),
+                      child: const Text("O'CHIRISH"),
                     ),
                   ],
                 ));
@@ -295,27 +295,28 @@ class _AddTableSheetState extends State<_AddTableSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Add Table',
+            const Text("Stol qo'shish",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 24),
             TextField(
                 controller: _nameCtrl,
                 decoration:
-                    const InputDecoration(labelText: 'Table Name (e.g. T-01)'),
+                    const InputDecoration(labelText: 'Stol nomi (masalan, Stol 1)'),
                 style: const TextStyle(color: AppTheme.textPrimary)),
             const SizedBox(height: 12),
             TextField(
                 controller: _zoneCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Zone (e.g. Zone A – Pool Hall)'),
+                    labelText: 'Zona (masalan, Asosiy zal)'),
                 style: const TextStyle(color: AppTheme.textPrimary)),
             const SizedBox(height: 12),
             DropdownButtonFormField<TableType>(
               value: _type,
               dropdownColor: AppTheme.surface2,
-              decoration: const InputDecoration(labelText: 'Table Type'),
+              decoration: const InputDecoration(labelText: 'Stol turi'),
               items: TableType.values
-                  .map((t) => DropdownMenuItem(value: t, child: Text(t.name)))
+                  .map((t) => DropdownMenuItem(
+                      value: t, child: Text(tableTypeLabel(t))))
                   .toList(),
               onChanged: (t) => setState(() => _type = t!),
             ),
@@ -323,8 +324,8 @@ class _AddTableSheetState extends State<_AddTableSheet> {
             TextField(
                 controller: _rateCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Hourly Rate (\$)',
-                    prefixIcon: Icon(Icons.attach_money)),
+                    labelText: "Soatlik narx (so'm)",
+                    prefixIcon: Icon(Icons.payments_outlined)),
                 keyboardType: TextInputType.number,
                 style: const TextStyle(color: AppTheme.textPrimary)),
             const SizedBox(height: 24),
@@ -332,7 +333,7 @@ class _AddTableSheetState extends State<_AddTableSheet> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: _submit,
-                child: const Text('ADD TABLE'),
+                child: const Text("STOL QO'SHISH"),
               ),
             ),
           ],
@@ -381,17 +382,17 @@ class _EditTableSheetState extends State<_EditTableSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Edit Table',
+          const Text('Stolni tahrirlash',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 24),
           TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Table Name'),
+              decoration: const InputDecoration(labelText: 'Stol nomi'),
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 12),
           TextField(
               controller: _rateCtrl,
-              decoration: const InputDecoration(labelText: 'Hourly Rate'),
+              decoration: const InputDecoration(labelText: "Soatlik narx (so'm)"),
               keyboardType: TextInputType.number,
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 24),
@@ -414,7 +415,7 @@ class _EditTableSheetState extends State<_EditTableSheet> {
                     previous: widget.table);
                 Navigator.pop(context);
               },
-              child: const Text('SAVE CHANGES'),
+              child: const Text('SAQLASH'),
             ),
           ),
         ],
@@ -477,7 +478,7 @@ class _MenuTabState extends State<_MenuTab> {
                     const Padding(
                       padding: EdgeInsets.only(top: 48),
                       child: Center(
-                          child: Text('No menu items yet',
+                          child: Text("Menyuda hali mahsulot yo'q",
                               style: TextStyle(color: AppTheme.textMuted))),
                     ),
                   ...items.map((item) => _AdminMenuRow(item: item)),
@@ -537,7 +538,7 @@ class _CategoriesBar extends StatelessWidget {
         TextButton.icon(
           onPressed: onEdit,
           icon: const Icon(Icons.edit_outlined, size: 16),
-          label: const Text('Categories'),
+          label: const Text('Kategoriyalar'),
         ),
       ],
     );
@@ -570,7 +571,7 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
     final name = _ctrl.text.trim();
     if (name.isEmpty) return;
     if (_list.any((c) => c.toLowerCase() == name.toLowerCase())) {
-      setState(() => _error = 'Already in the list');
+      setState(() => _error = "Ro'yxatda bor");
       return;
     }
     setState(() {
@@ -593,7 +594,7 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Menu Categories'),
+      title: const Text('Menyu kategoriyalari'),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -605,7 +606,7 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
                 contentPadding: EdgeInsets.zero,
                 title: Text(c),
                 subtitle: used
-                    ? const Text('Used by menu items',
+                    ? const Text('Mahsulotlarda ishlatilmoqda',
                         style:
                             TextStyle(color: AppTheme.textMuted, fontSize: 11))
                     : null,
@@ -623,7 +624,7 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
               controller: _ctrl,
               style: const TextStyle(color: AppTheme.textPrimary),
               decoration: InputDecoration(
-                labelText: 'New category',
+                labelText: 'Yangi kategoriya',
                 errorText: _error,
                 suffixIcon:
                     IconButton(icon: const Icon(Icons.add), onPressed: _add),
@@ -636,8 +637,8 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        ElevatedButton(onPressed: _save, child: const Text('SAVE')),
+            child: const Text('Bekor qilish')),
+        ElevatedButton(onPressed: _save, child: const Text('SAQLASH')),
       ],
     );
   }
@@ -683,7 +684,7 @@ class _AdminMenuRow extends StatelessWidget {
               Text(item.name,
                   style: const TextStyle(fontWeight: FontWeight.w700)),
               Text(
-                  '${item.category.toUpperCase()} · \$${item.price.toStringAsFixed(2)}',
+                  '${item.category.toUpperCase()} · ${formatCurrency(item.price)}',
                   style:
                       const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             ],
@@ -718,7 +719,7 @@ class _AdminMenuRow extends StatelessWidget {
             itemBuilder: (_) => [
               PopupMenuItem(
                   value: 'delete',
-                  child: Text('Delete', style: TextStyle(color: AppTheme.red))),
+                  child: Text("O'chirish", style: TextStyle(color: AppTheme.red))),
             ],
           ),
         ],
@@ -748,25 +749,25 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Add Menu Item',
+          const Text("Mahsulot qo'shish",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 24),
           TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Item Name'),
+              decoration: const InputDecoration(labelText: 'Mahsulot nomi'),
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 12),
           TextField(
               controller: _priceCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Price', prefixIcon: Icon(Icons.attach_money)),
+                  labelText: "Narx (so'm)", prefixIcon: Icon(Icons.payments_outlined)),
               keyboardType: TextInputType.number,
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             value: _category,
             dropdownColor: AppTheme.surface2,
-            decoration: const InputDecoration(labelText: 'Category'),
+            decoration: const InputDecoration(labelText: 'Kategoriya'),
             items: widget.categories
                 .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                 .toList(),
@@ -790,7 +791,7 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
                     )));
                 Navigator.pop(context);
               },
-              child: const Text('ADD ITEM'),
+              child: const Text("QO'SHISH"),
             ),
           ),
         ],
@@ -913,12 +914,12 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Add Staff Member',
+          const Text("Xodim qo'shish",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 24),
           TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Full Name'),
+              decoration: const InputDecoration(labelText: "To'liq ism"),
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 12),
           TextField(
@@ -929,16 +930,16 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
           const SizedBox(height: 12),
           TextField(
               controller: _passCtrl,
-              decoration: const InputDecoration(labelText: 'Initial Password'),
+              decoration: const InputDecoration(labelText: "Boshlang'ich parol"),
               obscureText: true,
               style: const TextStyle(color: AppTheme.textPrimary)),
           const SizedBox(height: 12),
           DropdownButtonFormField<UserRole>(
             value: _role,
             dropdownColor: AppTheme.surface2,
-            decoration: const InputDecoration(labelText: 'Role'),
+            decoration: const InputDecoration(labelText: 'Lavozim'),
             items: UserRole.values
-                .map((r) => DropdownMenuItem(value: r, child: Text(r.name)))
+                .map((r) => DropdownMenuItem(value: r, child: Text(roleLabel(r))))
                 .toList(),
             onChanged: (r) => setState(() => _role = r!),
           ),
@@ -953,7 +954,7 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
                       width: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: AppTheme.bg))
-                  : const Text('CREATE ACCOUNT'),
+                  : const Text('HISOB YARATISH'),
             ),
           ),
         ],
@@ -981,8 +982,8 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
       final signUpOff = e.code == 'admin-restricted-operation' ||
           e.code == 'operation-not-allowed';
       _showError(signUpOff
-          ? 'New accounts are switched off for this project. '
-              'Create the login in the Firebase console instead.'
+          ? "Bu loyihada yangi hisob ochish o'chirilgan. "
+              'Loginni Firebase konsolida yarating.'
           : e.message ?? e.code);
     } catch (e) {
       _showError(e.toString());

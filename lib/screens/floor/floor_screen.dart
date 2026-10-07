@@ -23,8 +23,8 @@ class FloorScreen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('THE BILLIARD'),
-            Text('LIVE STATUS',
+            const Text('BILYARD'),
+            Text('JONLI HOLAT',
                 style: TextStyle(color: AppTheme.textMuted.withOpacity(0.7), fontSize: 9, letterSpacing: 0.15)),
           ],
         ),
@@ -144,7 +144,7 @@ class FloorScreen extends StatelessWidget {
         builder: (__, ctrl) => AddItemsSheet(
           controller: ctrl,
           title: 'STOLSIZ SAVDO',
-          subtitle: 'Sale without a table',
+          subtitle: 'Stolsiz mahsulot sotish',
           onConfirm: (items) => _payCounterSale(context, user, items),
         ),
       ),
@@ -163,13 +163,13 @@ class FloorScreen extends StatelessWidget {
       context: context,
       builder: (_) => PaymentDialog(
         title: 'Stolsiz savdo',
-        confirmLabel: 'CONFIRM SALE',
+        confirmLabel: 'TASDIQLASH',
         debtorNames: debtorNames,
         summary: [
           ...items.map((i) => _SaleRow('${i.quantity}× ${i.name}',
-              '\$${i.subtotal.toStringAsFixed(2)}')),
+              formatCurrency(i.subtotal))),
           const Divider(color: AppTheme.border),
-          _SaleRow('Umumiy summa', '\$${total.toStringAsFixed(2)}',
+          _SaleRow('Umumiy summa', formatCurrency(total),
               bold: true),
         ],
       ),
@@ -186,10 +186,10 @@ class FloorScreen extends StatelessWidget {
       );
       messenger.showSnackBar(SnackBar(
           content: Text(
-              'Sale saved · \$${total.toStringAsFixed(2)} · ${paymentLabel(choice.method)}')));
+              'Savdo saqlandi · ${formatCurrency(total)} · ${paymentLabel(choice.method)}')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(
-          content: Text('Sale not saved: $e'),
+          content: Text('Savdo saqlanmadi: $e'),
           backgroundColor: AppTheme.red));
     }
   }
@@ -217,7 +217,7 @@ class FloorScreen extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.logout, color: AppTheme.red, size: 20),
-              title: const Text('Sign Out', style: TextStyle(color: AppTheme.red)),
+              title: const Text('Chiqish', style: TextStyle(color: AppTheme.red)),
               onTap: () {
                 Navigator.pop(context);
                 context.read<AuthBloc>().add(AuthSignOutRequested());
@@ -237,8 +237,8 @@ class _FilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filters = [
-      (null, 'ALL'),
-      ('billiard', 'Billiard'),
+      (null, 'HAMMASI'),
+      ('billiard', 'Bilyard'),
       ('ps', 'Play Station'),
     ];
     return Container(
@@ -288,7 +288,7 @@ class _FilterBar extends StatelessWidget {
                   decoration: const BoxDecoration(color: AppTheme.red, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
-                const Text('LIVE', style: TextStyle(color: AppTheme.red, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.1)),
+                const Text('JONLI', style: TextStyle(color: AppTheme.red, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.1)),
               ],
             ),
           ),
@@ -481,7 +481,7 @@ class _LiveTableCardState extends State<_LiveTableCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(table.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const Text('This table is reserved', style: TextStyle(color: AppTheme.textMuted)),
+            const Text('Bu stol band qilingan', style: TextStyle(color: AppTheme.textMuted)),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -490,7 +490,7 @@ class _LiveTableCardState extends State<_LiveTableCard> {
                   Navigator.pop(context);
                   _showOpenSessionSheet(context, table, user);
                 },
-                child: const Text('Start Session Anyway'),
+                child: const Text('Baribir seansni boshlash'),
               ),
             ),
           ],
@@ -527,16 +527,16 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Open Session · ${widget.table.name}',
+                  Text('Seans ochish · ${widget.table.name}',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  Text('\$${widget.table.hourlyRate.toStringAsFixed(2)}/hr',
+                  Text('${formatCurrency(widget.table.hourlyRate)}/soat',
                       style: const TextStyle(color: AppTheme.green, fontSize: 13)),
                 ],
               ),
             ],
           ),
           const SizedBox(height: 28),
-          const Text('NUMBER OF PLAYERS', style: TextStyle(color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
+          const Text("O'YINCHILAR SONI", style: TextStyle(color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -547,7 +547,7 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
               _CountButton(icon: Icons.add, onTap: () { if (_guestCount < 10) setState(() => _guestCount++); }),
               const Spacer(),
               Icon(Icons.person, color: AppTheme.textMuted, size: 16),
-              Text(' ${widget.table.capacity} max', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+              Text(' ${widget.table.capacity} gacha', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 28),
@@ -566,7 +566,7 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
                   },
                 );
               },
-              child: const Text('START SESSION'),
+              child: const Text('SEANSNI BOSHLASH'),
             ),
           ),
         ],
@@ -638,7 +638,7 @@ class _WalkInSheet extends StatelessWidget {
           children: [
             Icon(Icons.sports_bar_rounded, color: AppTheme.textMuted, size: 40),
             SizedBox(height: 12),
-            Text('No open tables available', style: TextStyle(color: AppTheme.textMuted)),
+            Text("Bo'sh stol yo'q", style: TextStyle(color: AppTheme.textMuted)),
           ],
         ),
       );
@@ -649,8 +649,8 @@ class _WalkInSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Quick Walk-In', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          const Text('Select an available table', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+          const Text("Bo'sh stollar", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text("Bo'sh stolni tanlang", style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
           const SizedBox(height: 20),
           ...openTables.map((t) => ListTile(
             contentPadding: EdgeInsets.zero,
@@ -660,7 +660,7 @@ class _WalkInSheet extends StatelessWidget {
               child: const Icon(Icons.table_bar, color: AppTheme.green, size: 18),
             ),
             title: Text(t.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text('\$${t.hourlyRate.toStringAsFixed(2)}/hr · ${t.type.name}',
+            subtitle: Text('${formatCurrency(t.hourlyRate)}/soat · ${tableTypeLabel(t.type)}',
                 style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             trailing: const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.textMuted),
             onTap: () {

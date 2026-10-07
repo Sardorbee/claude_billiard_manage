@@ -188,16 +188,16 @@ class _BottomNav extends StatelessWidget {
         type: BottomNavigationBarType.fixed,
         items: [
           const BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_rounded), label: 'Floor'),
+              icon: Icon(Icons.grid_view_rounded), label: 'Zal'),
           // const BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
           const BottomNavigationBarItem(
               icon: Icon(Icons.receipt_long_outlined), label: 'Qarzlar'),
           const BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
+              icon: Icon(Icons.bar_chart_rounded), label: 'Hisobot'),
           if (isAdmin)
             const BottomNavigationBarItem(
                 icon: Icon(Icons.admin_panel_settings_outlined),
-                label: 'Admin'),
+                label: 'Boshqaruv'),
         ],
       ),
     );

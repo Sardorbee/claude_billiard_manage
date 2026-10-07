@@ -27,7 +27,7 @@ class _StatsScreenState extends State<StatsScreen> {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
-        title: const Text('Stats & Reports'),
+        title: const Text('Hisobotlar'),
         actions: [
           TextButton.icon(
             onPressed: () {
@@ -48,9 +48,9 @@ class _StatsScreenState extends State<StatsScreen> {
               _reload(context, r);
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'today', child: Text('Today')),
-              const PopupMenuItem(value: 'week', child: Text('This Week')),
-              const PopupMenuItem(value: 'month', child: Text('This Month')),
+              const PopupMenuItem(value: 'today', child: Text('Bugun')),
+              const PopupMenuItem(value: 'week', child: Text('Shu hafta')),
+              const PopupMenuItem(value: 'month', child: Text('Shu oy')),
             ],
             child: Container(
               margin: const EdgeInsets.only(right: 8),
@@ -97,9 +97,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
   String get _rangeLabel {
     switch (_range) {
-      case 'week': return 'This Week';
-      case 'month': return 'This Month';
-      default: return 'Today';
+      case 'week': return 'Shu hafta';
+      case 'month': return 'Shu oy';
+      default: return 'Bugun';
     }
   }
 }
@@ -123,31 +123,31 @@ class _StatsContent extends StatelessWidget {
           childAspectRatio: 2.0,
           children: [
             StatCard(
-              label: 'TOTAL REVENUE',
-              value: '\$${data.totalRevenue.toStringAsFixed(2)}',
+              label: 'JAMI TUSHUM',
+              value: formatCurrency(data.totalRevenue),
               valueColor: AppTheme.green,
-              icon: Icons.attach_money,
+              icon: Icons.payments_outlined,
             ),
             StatCard(
-              label: 'SESSIONS',
+              label: 'SEANSLAR',
               value: '${data.totalSessions}',
               icon: Icons.sports_bar_outlined,
             ),
             StatCard(
-              label: 'AVG SESSION VALUE',
-              value: '\$${data.avgSessionValue.toStringAsFixed(2)}',
+              label: "O'RTACHA CHEK",
+              value: formatCurrency(data.avgSessionValue),
               icon: Icons.trending_up,
             ),
             StatCard(
-              label: 'AVG DURATION',
-              value: '${data.avgSessionMinutes.toStringAsFixed(0)}min',
+              label: "O'RTACHA VAQT",
+              value: '${data.avgSessionMinutes.toStringAsFixed(0)} daq',
               icon: Icons.access_time,
             ),
           ],
         ),
 
         const SizedBox(height: 20),
-        SectionHeader('Revenue Breakdown'),
+        SectionHeader('Tushum tarkibi'),
         Row(
           children: [
             Expanded(child: _RevenueBreakdownBar(timeRevenue: data.timeRevenue, fbRevenue: data.fbRevenue, total: data.totalRevenue)),
@@ -157,7 +157,7 @@ class _StatsContent extends StatelessWidget {
         // Revenue by day chart
         if (data.revenueByDay.isNotEmpty) ...[
           const SizedBox(height: 20),
-          SectionHeader('Revenue by Day'),
+          SectionHeader("Kunlar bo'yicha tushum"),
           Container(
             height: 200,
             padding: const EdgeInsets.all(16),
@@ -173,7 +173,7 @@ class _StatsContent extends StatelessWidget {
         // Sessions by hour
         if (data.sessionsByHour.isNotEmpty) ...[
           const SizedBox(height: 20),
-          SectionHeader('Busy Hours'),
+          SectionHeader('Gavjum soatlar'),
           Container(
             height: 160,
             padding: const EdgeInsets.all(16),
@@ -189,10 +189,10 @@ class _StatsContent extends StatelessWidget {
         // Top tables
         if (data.revenueByTable.isNotEmpty) ...[
           const SizedBox(height: 20),
-          SectionHeader('Top Tables'),
+          SectionHeader('Eng faol stollar'),
           ...(_sortedByValue(data.revenueByTable).take(5).map((entry) => _RankRow(
             label: entry.key,
-            value: '\$${entry.value.toStringAsFixed(2)}',
+            value: formatCurrency(entry.value),
             maxValue: data.revenueByTable.values.reduce((a, b) => a > b ? a : b),
             currentValue: entry.value,
           ))),
@@ -201,7 +201,7 @@ class _StatsContent extends StatelessWidget {
         // Top menu items
         if (data.topMenuItems.isNotEmpty) ...[
           const SizedBox(height: 20),
-          SectionHeader('Top Menu Items'),
+          SectionHeader("Eng ko'p sotilgan"),
           ...(_sortedByValueInt(data.topMenuItems).take(5).map((entry) => _RankRow(
             label: entry.key,
             value: '×${entry.value}',
@@ -214,7 +214,7 @@ class _StatsContent extends StatelessWidget {
         // Recent sessions
         if (data.sessions.isNotEmpty) ...[
           const SizedBox(height: 20),
-          SectionHeader('Recent Sessions'),
+          SectionHeader("So'nggi seanslar"),
           ...data.sessions.take(10).map((s) => _SessionHistoryRow(session: s)),
         ],
 
@@ -262,9 +262,9 @@ class _RevenueBreakdownBar extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _Legend(color: AppTheme.green, label: 'Time', value: '\$${timeRevenue.toStringAsFixed(2)}'),
+              _Legend(color: AppTheme.green, label: 'Stol vaqti', value: formatCurrency(timeRevenue)),
               const SizedBox(width: 24),
-              _Legend(color: AppTheme.blue, label: 'F&B', value: '\$${fbRevenue.toStringAsFixed(2)}'),
+              _Legend(color: AppTheme.blue, label: 'Mahsulotlar', value: formatCurrency(fbRevenue)),
             ],
           ),
         ],
@@ -314,7 +314,7 @@ class _RevenueChart extends StatelessWidget {
           getDrawingHorizontalLine: (_) => const FlLine(color: AppTheme.border, strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40, getTitlesWidget: (v, _) => Text('\$${v.toInt()}', style: const TextStyle(color: AppTheme.textMuted, fontSize: 9)))),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 44, getTitlesWidget: (v, _) => Text(formatCompact(v), style: const TextStyle(color: AppTheme.textMuted, fontSize: 9)))),
           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, _) {
             final idx = v.toInt();
             if (idx < 0 || idx >= entries.length) return const SizedBox();
@@ -436,7 +436,7 @@ class _SessionHistoryRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('\$${session.paidTotal.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
+              Text(formatCurrency(session.paidTotal), style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
               Text(formatTime(session.elapsedSeconds.toInt()), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
             ],
           ),

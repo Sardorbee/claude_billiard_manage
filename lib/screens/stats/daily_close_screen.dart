@@ -124,7 +124,7 @@ class _DayPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final time = DateFormat('d MMM HH:mm');
+    final time = DateFormat('dd.MM HH:mm');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: const BoxDecoration(
@@ -136,7 +136,7 @@ class _DayPicker extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                Text(DateFormat('d MMMM yyyy').format(day.date),
+                Text(DateFormat('dd.MM.yyyy').format(day.date),
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 15)),
                 Text('${time.format(day.start)} – ${time.format(day.end)}',
