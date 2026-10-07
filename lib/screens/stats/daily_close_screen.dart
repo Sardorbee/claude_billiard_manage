@@ -42,15 +42,17 @@ class _DailyCloseScreenState extends State<DailyCloseScreen> {
   void _show(BusinessDay day) {
     final sessions = context.read<SessionRepository>();
     final debts = context.read<DebtRepository>();
+    final expenses = context.read<ExpenseRepository>();
     setState(() {
       _day = day;
       _report = () async {
         final results = await Future.wait([
           sessions.getSessionsEndedBetween(widget.venueId, day.start, day.end),
           debts.getEntriesBetween(widget.venueId, day.start, day.end),
+          expenses.getBetween(widget.venueId, day.start, day.end),
         ]);
-        return DailyReport.from(
-            results[0] as List<SessionModel>, results[1] as List<DebtEntry>);
+        return DailyReport.from(results[0] as List<SessionModel>,
+            results[1] as List<DebtEntry>, results[2] as List<Expense>);
       }();
     });
   }
@@ -176,7 +178,8 @@ class _ReportView extends StatelessWidget {
               child: StatCard(
                 label: 'NAQD PUL',
                 value: formatCurrency(r.cashExpected),
-                valueColor: AppTheme.green,
+                // Negative means more was spent from the cash than came in.
+                valueColor: r.cashExpected < 0 ? AppTheme.red : AppTheme.green,
                 icon: Icons.payments_outlined,
               ),
             ),
@@ -216,6 +219,20 @@ class _ReportView extends StatelessWidget {
             if (repaidTransfer > 0) _Line("O'tkazma", repaidTransfer),
           ]),
         ],
+
+        const SectionHeader('XARAJATLAR VA FOYDA'),
+        _Card(children: [
+          ...(expensesByCategory(r.expenses).entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value)))
+              .map((e) => _Line(e.key, e.value)),
+          if (r.expenses.isEmpty)
+            const Text("Xarajat yo'q",
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+          const Divider(color: AppTheme.border),
+          _Line('Jami xarajat', r.spent),
+          _Line('Sof foyda', r.profit,
+              bold: true, color: r.profit < 0 ? AppTheme.red : AppTheme.green),
+        ]),
 
         const SectionHeader('SOTILGAN MAHSULOTLAR'),
         _Card(children: [

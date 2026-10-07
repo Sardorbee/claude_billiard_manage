@@ -126,11 +126,62 @@ check("admin reads the activity log", read(f"{V}/activity/a1", admin), True)
 check("admin edits an activity entry", write(f"{V}/activity/a1", {"subject": "y"}, admin), False)
 check("admin sets the day-end hour", write(V, {"dayEndHour": 5}, admin), True)
 
+spend = {"amount": 5000, "category": "Boshqa", "paymentMethod": "cash"}
+check("worker records an expense", write(f"{V}/expenses/x1", {**spend, "createdBy": worker_uid}, worker, mask=False), True)
+check("worker records an expense in the admin's name",
+      write(f"{V}/expenses/x2", {**spend, "createdBy": admin_uid}, worker, mask=False), False)
+check("worker edits an expense", write(f"{V}/expenses/x1", {"amount": 1}, worker), False)
+check("worker deletes an expense", call(f"{FS}/{V}/expenses/x1", method="DELETE", token=worker)[0], False)
+check("admin deletes an expense", call(f"{FS}/{V}/expenses/x1", method="DELETE", token=admin)[0], True)
+
 live = f"{RTDB}/venues/test-venue/sessions/table-9.json?ns={NS}"
 good = {"sessionId": "s", "startedAt": 1, "totalPausedMs": 0, "status": "active"}
 check("signed-out user reads live timers", call(live)[0], False)
 check("worker writes a live timer", call(live + f"&auth={worker}", good, "PUT")[0], True)
 check("worker writes a malformed timer",
       call(live + f"&auth={worker}", {**good, "status": "hacked"}, "PUT")[0], False)
+
+# ── Storage: menu photos ──
+import urllib.parse
+BUCKET = "billiard-manage.firebasestorage.app"
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+                    "0000000d49444154789c6360000002000001e221bc330000000049454e44ae426082")
+
+
+def upload(path, token, content_type="image/png", body=PNG):
+    url = (f"http://localhost:9199/v0/b/{BUCKET}/o?uploadType=media&name="
+           + urllib.parse.quote(path, safe=""))
+    headers = {"Content-Type": content_type}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(
+                url, data=body, method="POST", headers=headers)) as res:
+            return res.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+def download(path, token):
+    url = (f"http://localhost:9199/v0/b/{BUCKET}/o/"
+           + urllib.parse.quote(path, safe="") + "?alt=media")
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as res:
+            return res.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+photo = "venues/test-venue/menu/cola_1"
+check("admin uploads a menu photo", upload(photo, admin), True)
+check("worker uploads a menu photo", upload("venues/test-venue/menu/cola_2", worker), False)
+check("admin uploads a non-image file",
+      upload("venues/test-venue/menu/cola_3", admin, "application/pdf"), False)
+check("admin uploads a photo over 2 MB",
+      upload("venues/test-venue/menu/cola_4", admin, body=PNG + b"0" * (2 * 1024 * 1024)), False)
+check("admin uploads into another venue", upload("venues/other/menu/x", admin), False)
+check("worker views a menu photo", download(photo, worker), True)
+check("signed-out user views a menu photo", download(photo, None), False)
 
 print(f"\n{sum(results)}/{len(results)} checks passed")

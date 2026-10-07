@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'firebase_options.dart';
 import 'blocs/blocs.dart';
@@ -24,8 +26,13 @@ void main() async {
   // emulators (see firebase.json) instead of the live project.
   if (useEmulators) {
     await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    // On web a remembered sign-in makes the SDK contact the live project
+    // before the line above runs, and the switch to the emulator is then
+    // silently ignored. Not remembering sign-ins in emulator mode avoids it.
+    if (kIsWeb) await FirebaseAuth.instance.setPersistence(Persistence.NONE);
     FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
     SessionRepository.liveDatabase.useDatabaseEmulator('localhost', 9000);
+    await FirebaseStorage.instance.useStorageEmulator('localhost', 9199);
   }
 
   // Lock to portrait
@@ -54,6 +61,7 @@ class TheFloorApp extends StatelessWidget {
     final menuRepo = MenuRepository(activityRepo);
     final bookingRepo = BookingRepository();
     final venueRepo = VenueRepository(activityRepo);
+    final expenseRepo = ExpenseRepository(activityRepo);
 
     return MultiRepositoryProvider(
       providers: [
@@ -65,6 +73,7 @@ class TheFloorApp extends StatelessWidget {
         RepositoryProvider.value(value: menuRepo),
         RepositoryProvider.value(value: bookingRepo),
         RepositoryProvider.value(value: venueRepo),
+        RepositoryProvider.value(value: expenseRepo),
       ],
       child: _BlocProviders(
         authRepo: authRepo,

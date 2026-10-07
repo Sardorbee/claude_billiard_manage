@@ -126,4 +126,49 @@ void main() {
       expect(cola.amount, 40000);
     });
   });
+
+  group('expenses and profit', () {
+    Expense spent(double amount, String category, PaymentMethod method) =>
+        Expense(
+          id: 'x',
+          amount: amount,
+          category: category,
+          paymentMethod: method,
+          date: DateTime(2026, 10, 7, 21),
+          createdBy: 'u',
+          createdByName: 'U',
+        );
+
+    final report = DailyReport.from([
+      _sale(finalTotal: 100000, method: PaymentMethod.cash),
+      _sale(finalTotal: 50000, method: PaymentMethod.transfer),
+    ], [], [
+      spent(30000, 'Mahsulot xaridi', PaymentMethod.cash),
+      spent(10000, 'Mahsulot xaridi', PaymentMethod.cash),
+      spent(20000, 'Kommunal', PaymentMethod.transfer),
+    ]);
+
+    test('profit is sales minus expenses', () {
+      expect(report.spent, 60000);
+      expect(report.profit, 150000 - 60000);
+    });
+
+    test('expenses paid in cash reduce the cash on hand', () {
+      expect(report.cashExpected, 100000 - 40000);
+      expect(report.transferExpected, 50000 - 20000);
+    });
+
+    test('expenses are totalled per category', () {
+      expect(expensesByCategory(report.expenses),
+          {'Mahsulot xaridi': 40000.0, 'Kommunal': 20000.0});
+    });
+
+    test('a business month runs between the first-day rollovers', () {
+      final month = BusinessMonth.containing(DateTime(2026, 11, 1, 3), 6);
+      expect(month.month, DateTime(2026, 10));
+      expect(month.start, DateTime(2026, 10, 1, 6));
+      expect(month.end, DateTime(2026, 11, 1, 6));
+      expect(month.shifted(3, 6).month, DateTime(2027, 1));
+    });
+  });
 }

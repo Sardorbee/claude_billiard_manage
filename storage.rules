@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // The caller's staff profile, read from Firestore.
+    function me() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function inVenue(venueId) {
+      return request.auth != null && me().venueId == venueId
+        && me().get('isActive', true) != false;
+    }
+
+    // Menu photos: staff of the venue can see them; only a manager or
+    // owner can add, replace or remove one, and only small image files.
+    match /venues/{venueId}/menu/{fileName} {
+      allow read: if inVenue(venueId);
+      allow delete: if inVenue(venueId) && me().role in ['manager', 'owner'];
+      allow create, update: if inVenue(venueId)
+        && me().role in ['manager', 'owner']
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

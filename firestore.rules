@@ -125,6 +125,17 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // Staff record what was spent (so the cash adds up); only someone
+      // above staff can remove an entry, and nobody edits one.
+      match /expenses/{expenseId} {
+        allow read: if inVenue(venueId);
+        allow create: if inVenue(venueId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.amount > 0;
+        allow update: if false;
+        allow delete: if canOverride(venueId);
+      }
+
       match /bookings/{bookingId} {
         allow read, write: if inVenue(venueId);
       }

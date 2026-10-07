@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'daily_close_screen.dart';
+import 'expenses_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../blocs/blocs.dart';
@@ -29,17 +30,6 @@ class _StatsScreenState extends State<StatsScreen> {
       appBar: AppBar(
         title: const Text('Hisobotlar'),
         actions: [
-          TextButton.icon(
-            onPressed: () {
-              final authState = context.read<AuthBloc>().state;
-              if (authState is! AuthAuthenticated) return;
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) =>
-                      DailyCloseScreen(venueId: authState.user.venueId)));
-            },
-            icon: const Icon(Icons.summarize_outlined, size: 18),
-            label: const Text('Kunlik hisobot'),
-          ),
           PopupMenuButton<String>(
             color: AppTheme.surface2,
             initialValue: _range,
@@ -71,21 +61,60 @@ class _StatsScreenState extends State<StatsScreen> {
           ),
         ],
       ),
-      body: BlocBuilder<StatsBloc, StatsState>(
-        builder: (context, state) {
-          if (state is StatsLoading) {
-            return const Center(child: CircularProgressIndicator(color: AppTheme.green));
-          }
-          if (state is StatsLoaded) {
-            return _StatsContent(data: state.data);
-          }
-          if (state is StatsError) {
-            return Center(child: Text(state.message, style: const TextStyle(color: AppTheme.red)));
-          }
-          return const Center(child: Text('Loading...', style: TextStyle(color: AppTheme.textMuted)));
-        },
+      body: Column(
+        children: [
+          // The two reports the owner opens most.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _open(
+                        (venueId) => DailyCloseScreen(venueId: venueId)),
+                    icon: const Icon(Icons.summarize_outlined, size: 18),
+                    label: const Text('Kunlik hisobot'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () =>
+                        _open((venueId) => ExpensesScreen(venueId: venueId)),
+                    icon: const Icon(Icons.account_balance_wallet_outlined,
+                        size: 18),
+                    label: const Text('Xarajatlar'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: BlocBuilder<StatsBloc, StatsState>(
+              builder: (context, state) {
+                if (state is StatsLoading) {
+                  return const Center(child: CircularProgressIndicator(color: AppTheme.green));
+                }
+                if (state is StatsLoaded) {
+                  return _StatsContent(data: state.data);
+                }
+                if (state is StatsError) {
+                  return Center(child: Text(state.message, style: const TextStyle(color: AppTheme.red)));
+                }
+                return const Center(child: Text('Yuklanmoqda...', style: TextStyle(color: AppTheme.textMuted)));
+              },
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _open(Widget Function(String venueId) page) {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => page(authState.user.venueId)));
   }
 
   void _reload(BuildContext context, String range) {

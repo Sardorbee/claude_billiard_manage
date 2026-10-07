@@ -670,6 +670,78 @@ class DebtEntry {
       };
 }
 
+// ─── EXPENSES ────────────────────────────────────────────────────────────────
+
+// Money the club spent. Entries are never edited; a wrong one is deleted by
+// the admin and entered again.
+class Expense {
+  final String id;
+  final double amount;
+  final String category; // one of Expense.categories
+  final String? note;
+  final PaymentMethod paymentMethod; // cash or transfer
+  final DateTime date;
+  final String createdBy;
+  final String createdByName;
+
+  static const categories = [
+    'Ijara',
+    'Maosh',
+    'Mahsulot xaridi',
+    'Kommunal',
+    "Ta'mirlash",
+    'Boshqa',
+  ];
+
+  const Expense({
+    required this.id,
+    required this.amount,
+    required this.category,
+    this.note,
+    required this.paymentMethod,
+    required this.date,
+    required this.createdBy,
+    required this.createdByName,
+  });
+
+  factory Expense.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return Expense(
+      id: doc.id,
+      amount: (d['amount'] ?? 0).toDouble(),
+      category: d['category'] ?? 'Boshqa',
+      note: d['note'],
+      paymentMethod: d['paymentMethod'] == PaymentMethod.transfer.name
+          ? PaymentMethod.transfer
+          : PaymentMethod.cash,
+      date: (d['date'] as Timestamp).toDate(),
+      createdBy: d['createdBy'] ?? '',
+      createdByName: d['createdByName'] ?? '',
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'amount': amount,
+        'category': category,
+        'note': note,
+        'paymentMethod': paymentMethod.name,
+        'date': Timestamp.fromDate(date),
+        'createdBy': createdBy,
+        'createdByName': createdByName,
+      };
+}
+
+double totalExpenses(Iterable<Expense> expenses) =>
+    expenses.fold(0, (sum, e) => sum + e.amount);
+
+Map<String, double> expensesByCategory(Iterable<Expense> expenses) {
+  final map = <String, double>{};
+  for (final e in expenses) {
+    map[e.category] = (map[e.category] ?? 0) + e.amount;
+  }
+  return map;
+}
+
 // ─── BUSINESS DAY & DAILY REPORT ─────────────────────────────────────────────
 
 // The club stays open past midnight, so its "day" runs from the admin's
@@ -696,6 +768,26 @@ class BusinessDay {
       DateTime(date.year, date.month, date.day + days), endHour);
 }
 
+// A calendar month of business days: from the first day's start to the
+// start of the next month's first day.
+class BusinessMonth {
+  final DateTime month; // first of the month
+  final DateTime start; // inclusive
+  final DateTime end; // exclusive
+
+  BusinessMonth(DateTime anyDay, int endHour)
+      : month = DateTime(anyDay.year, anyDay.month),
+        start = DateTime(anyDay.year, anyDay.month, 1, endHour),
+        end = DateTime(anyDay.year, anyDay.month + 1, 1, endHour);
+
+  // The month that the business day containing [moment] belongs to.
+  factory BusinessMonth.containing(DateTime moment, int endHour) =>
+      BusinessMonth(BusinessDay.containing(moment, endHour).date, endHour);
+
+  BusinessMonth shifted(int months, int endHour) =>
+      BusinessMonth(DateTime(month.year, month.month + months), endHour);
+}
+
 class ItemSold {
   final String name;
   final String category;
@@ -716,6 +808,7 @@ class DailyReport {
   final int tableSessions;
   final int counterSales;
   final int voided;
+  final List<Expense> expenses;
 
   const DailyReport({
     required this.tableTime,
@@ -727,7 +820,16 @@ class DailyReport {
     required this.tableSessions,
     required this.counterSales,
     required this.voided,
+    this.expenses = const [],
   });
+
+  double get spent => totalExpenses(expenses);
+  double _spentBy(PaymentMethod m) =>
+      totalExpenses(expenses.where((e) => e.paymentMethod == m));
+
+  // Sales minus expenses. Sales made on debt count as sales here even
+  // though the money hasn't arrived yet.
+  double get profit => totalSales - spent;
 
   double get foodAndDrink => byCategory.values.fold(0, (a, b) => a + b);
   double get totalSales => tableTime + foodAndDrink;
@@ -736,15 +838,20 @@ class DailyReport {
   double _repaid(PaymentMethod m) => debtPayments[m] ?? 0;
 
   // Money that should physically be there: today's sales paid that way plus
-  // old debts settled that way.
+  // old debts settled that way, less anything spent from it.
   double get cashExpected =>
-      _sales(PaymentMethod.cash) + _repaid(PaymentMethod.cash);
+      _sales(PaymentMethod.cash) +
+      _repaid(PaymentMethod.cash) -
+      _spentBy(PaymentMethod.cash);
   double get transferExpected =>
-      _sales(PaymentMethod.transfer) + _repaid(PaymentMethod.transfer);
+      _sales(PaymentMethod.transfer) +
+      _repaid(PaymentMethod.transfer) -
+      _spentBy(PaymentMethod.transfer);
   double get soldOnDebt => _sales(PaymentMethod.debt);
 
   factory DailyReport.from(
-      List<SessionModel> sessions, List<DebtEntry> debtEntries) {
+      List<SessionModel> sessions, List<DebtEntry> debtEntries,
+      [List<Expense> expenses = const []]) {
     double tableTime = 0, unknown = 0;
     int tableSessions = 0, counterSales = 0, voided = 0;
     final byCategory = <String, double>{};
@@ -793,6 +900,7 @@ class DailyReport {
       tableSessions: tableSessions,
       counterSales: counterSales,
       voided: voided,
+      expenses: expenses,
     );
   }
 }
@@ -813,6 +921,7 @@ abstract class ActivityType {
   static const debtWrittenOff = 'debtWrittenOff';
   static const staffCreated = 'staffCreated';
   static const dayEndChanged = 'dayEndChanged';
+  static const expenseDeleted = 'expenseDeleted';
 }
 
 class ActivityEntry {

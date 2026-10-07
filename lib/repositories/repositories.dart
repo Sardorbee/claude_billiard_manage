@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart' hide Transaction;
+import 'package:firebase_database/firebase_database.dart' hide Transaction, Query;
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 
@@ -575,11 +577,49 @@ class SessionRepository {
 
 // ─── MENU REPOSITORY ──────────────────────────────────────────────────────────
 
+// A picked photo, ready to upload.
+typedef MenuImage = ({Uint8List bytes, String contentType});
+
 class MenuRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
   final ActivityRepository _activity;
 
   MenuRepository(this._activity);
+
+  // Each upload gets its own file name, so a replaced photo has a new URL
+  // and phones don't keep showing the cached old one.
+  Future<String> _uploadImage(
+      String venueId, String itemId, MenuImage image) async {
+    final ref = _storage.ref(
+        'venues/$venueId/menu/${itemId}_${DateTime.now().millisecondsSinceEpoch}');
+    await ref.putData(
+        image.bytes, SettableMetadata(contentType: image.contentType));
+    return ref.getDownloadURL();
+  }
+
+  // Best effort: a photo left behind in storage does no harm.
+  Future<void> _deleteImage(String? url) async {
+    if (url == null || url.isEmpty) return;
+    try {
+      await _storage.refFromURL(url).delete();
+    } catch (_) {}
+  }
+
+  // Adds or replaces an item's photo.
+  Future<void> setItemImage(
+      String venueId, MenuItem item, MenuImage image) async {
+    final url = await _uploadImage(venueId, item.id, image);
+    await _db.collection('venues').doc(venueId).collection('menu').doc(item.id)
+        .update({'imageUrl': url});
+    await _deleteImage(item.imageUrl);
+  }
+
+  Future<void> removeItemImage(String venueId, MenuItem item) async {
+    await _db.collection('venues').doc(venueId).collection('menu').doc(item.id)
+        .update({'imageUrl': null});
+    await _deleteImage(item.imageUrl);
+  }
 
   Stream<List<MenuItem>> watchMenu(String venueId) {
     return _db
@@ -591,11 +631,15 @@ class MenuRepository {
         .map((snap) => snap.docs.map(MenuItem.fromFirestore).toList());
   }
 
-  Future<MenuItem> addItem(String venueId, MenuItem item) async {
+  Future<MenuItem> addItem(String venueId, MenuItem item,
+      {MenuImage? image}) async {
     final ref = _db.collection('venues').doc(venueId).collection('menu').doc();
+    final imageUrl = image == null
+        ? item.imageUrl
+        : await _uploadImage(venueId, ref.id, image);
     final newItem = MenuItem(
       id: ref.id, name: item.name, price: item.price,
-      category: item.category, imageUrl: item.imageUrl,
+      category: item.category, imageUrl: imageUrl,
       isAvailable: item.isAvailable, stockCount: item.stockCount, venueId: venueId,
     );
     await ref.set(newItem.toFirestore());
@@ -610,6 +654,7 @@ class MenuRepository {
 
   Future<void> deleteItem(String venueId, MenuItem item) async {
     await _db.collection('venues').doc(venueId).collection('menu').doc(item.id).delete();
+    await _deleteImage(item.imageUrl);
     await _activity.log(venueId, ActivityType.menuItemDeleted, item.name,
         detail: _money(item.price));
   }
@@ -889,6 +934,48 @@ class DebtRepository {
         'nameLower': name.trim().toLowerCase(),
         'phone': phone,
       });
+}
+
+// ─── EXPENSE REPOSITORY ───────────────────────────────────────────────────────
+
+class ExpenseRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  ExpenseRepository(this._activity);
+
+  CollectionReference<Map<String, dynamic>> _expenses(String venueId) =>
+      _db.collection('venues').doc(venueId).collection('expenses');
+
+  Query<Map<String, dynamic>> _between(
+          String venueId, DateTime from, DateTime to) =>
+      _expenses(venueId)
+          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+          .where('date', isLessThan: Timestamp.fromDate(to))
+          .orderBy('date', descending: true);
+
+  // Newest first.
+  Stream<List<Expense>> watchBetween(
+          String venueId, DateTime from, DateTime to) =>
+      _between(venueId, from, to)
+          .snapshots()
+          .map((snap) => snap.docs.map(Expense.fromFirestore).toList());
+
+  Future<List<Expense>> getBetween(
+      String venueId, DateTime from, DateTime to) async {
+    final snap = await _between(venueId, from, to).get();
+    return snap.docs.map(Expense.fromFirestore).toList();
+  }
+
+  Future<void> add(String venueId, Expense expense) =>
+      _expenses(venueId).add(expense.toFirestore());
+
+  // Deleting is how a mistake is corrected, so it goes in the activity log.
+  Future<void> delete(String venueId, Expense expense) async {
+    await _expenses(venueId).doc(expense.id).delete();
+    await _activity.log(venueId, ActivityType.expenseDeleted, expense.category,
+        detail: _money(expense.amount));
+  }
 }
 
 // ─── VENUE REPOSITORY ─────────────────────────────────────────────────────────

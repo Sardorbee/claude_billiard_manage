@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/blocs.dart';
 import '../../models/models.dart';
@@ -644,9 +645,76 @@ class _CategoriesDialogState extends State<_CategoriesDialog> {
   }
 }
 
-class _AdminMenuRow extends StatelessWidget {
+// Asks where the photo comes from and returns it shrunk for upload, or
+// null if nothing was picked.
+Future<MenuImage?> _pickMenuImage(BuildContext context) async {
+  final source = await showModalBottomSheet<ImageSource>(
+    context: context,
+    backgroundColor: AppTheme.surface,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Galereyadan tanlash'),
+            onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Suratga olish'),
+            onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (source == null) return null;
+  // Menu photos are shown small, so a modest size keeps uploads quick and
+  // storage use low.
+  final file = await ImagePicker()
+      .pickImage(source: source, maxWidth: 800, imageQuality: 75);
+  if (file == null) return null;
+  final name = file.name.toLowerCase();
+  final contentType = file.mimeType ??
+      (name.endsWith('.png')
+          ? 'image/png'
+          : name.endsWith('.webp')
+              ? 'image/webp'
+              : 'image/jpeg');
+  return (bytes: await file.readAsBytes(), contentType: contentType);
+}
+
+class _AdminMenuRow extends StatefulWidget {
   final MenuItem item;
   const _AdminMenuRow({required this.item});
+
+  @override
+  State<_AdminMenuRow> createState() => _AdminMenuRowState();
+}
+
+class _AdminMenuRowState extends State<_AdminMenuRow> {
+  bool _uploading = false;
+
+  MenuItem get item => widget.item;
+
+  Future<void> _changeImage() async {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = context.read<MenuRepository>();
+    final image = await _pickMenuImage(context);
+    if (image == null || !mounted) return;
+    setState(() => _uploading = true);
+    try {
+      await repo.setItemImage(authState.user.venueId, item, image);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Rasm yuklanmadi: $e'),
+          backgroundColor: AppTheme.red));
+    }
+    if (mounted) setState(() => _uploading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -663,18 +731,32 @@ class _AdminMenuRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-                color: AppTheme.surface2,
-                borderRadius: BorderRadius.circular(4)),
-            child: item.imageUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: Image.network(item.imageUrl!, fit: BoxFit.cover))
-                : const Icon(Icons.fastfood_outlined,
-                    color: AppTheme.textMuted, size: 20),
+          // Tap the picture to add or replace the photo.
+          GestureDetector(
+            onTap: _uploading ? null : _changeImage,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                  color: AppTheme.surface2,
+                  borderRadius: BorderRadius.circular(4)),
+              child: _uploading
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.green))
+                  : item.imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.network(item.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppTheme.textMuted,
+                                  size: 20)))
+                      : const Icon(Icons.add_a_photo_outlined,
+                          color: AppTheme.textMuted, size: 20),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -706,6 +788,15 @@ class _AdminMenuRow extends StatelessWidget {
           PopupMenuButton<String>(
             color: AppTheme.surface2,
             onSelected: (v) {
+              if (v == 'image') _changeImage();
+              if (v == 'removeImage') {
+                final authState = context.read<AuthBloc>().state;
+                if (authState is AuthAuthenticated) {
+                  context
+                      .read<MenuRepository>()
+                      .removeItemImage(authState.user.venueId, item);
+                }
+              }
               if (v == 'delete') {
                 final authState = context.read<AuthBloc>().state;
                 final user =
@@ -717,6 +808,14 @@ class _AdminMenuRow extends StatelessWidget {
               }
             },
             itemBuilder: (_) => [
+              PopupMenuItem(
+                  value: 'image',
+                  child: Text(item.imageUrl == null
+                      ? "Rasm qo'shish"
+                      : 'Rasmni almashtirish')),
+              if (item.imageUrl != null)
+                const PopupMenuItem(
+                    value: 'removeImage', child: Text("Rasmni o'chirish")),
               PopupMenuItem(
                   value: 'delete',
                   child: Text("O'chirish", style: TextStyle(color: AppTheme.red))),
@@ -739,6 +838,43 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
   late String _category = widget.categories.first;
+  MenuImage? _image;
+  bool _saving = false;
+
+  Future<void> _pick() async {
+    final image = await _pickMenuImage(context);
+    if (image != null && mounted) setState(() => _image = image);
+  }
+
+  Future<void> _save() async {
+    final authState = context.read<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final name = _nameCtrl.text.trim();
+    if (user == null || name.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _saving = true);
+    try {
+      // Saved directly rather than through the bloc so the sheet can wait
+      // for the photo upload and report a failure.
+      await context.read<MenuRepository>().addItem(
+            user.venueId,
+            MenuItem(
+              id: '',
+              name: name,
+              price: double.tryParse(_priceCtrl.text) ?? 0,
+              category: _category,
+              venueId: user.venueId,
+            ),
+            image: _image,
+          );
+      navigator.pop();
+    } catch (e) {
+      if (mounted) setState(() => _saving = false);
+      messenger.showSnackBar(SnackBar(
+          content: Text('Saqlanmadi: $e'), backgroundColor: AppTheme.red));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -752,6 +888,35 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
           const Text("Mahsulot qo'shish",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 24),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: _pick,
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface2,
+                    border: Border.all(color: AppTheme.border),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: _image == null
+                      ? const Icon(Icons.add_a_photo_outlined,
+                          color: AppTheme.textMuted)
+                      : Image.memory(_image!.bytes, fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(width: 12),
+              TextButton(
+                onPressed: _pick,
+                child: Text(_image == null
+                    ? "Rasm qo'shish (ixtiyoriy)"
+                    : 'Rasmni almashtirish'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
               controller: _nameCtrl,
               decoration: const InputDecoration(labelText: 'Mahsulot nomi'),
@@ -777,21 +942,14 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {
-                final authState = context.read<AuthBloc>().state;
-                final user =
-                    authState is AuthAuthenticated ? authState.user : null;
-                if (user == null) return;
-                context.read<MenuBloc>().add(MenuItemAddRequested(MenuItem(
-                      id: '',
-                      name: _nameCtrl.text.trim(),
-                      price: double.tryParse(_priceCtrl.text) ?? 0,
-                      category: _category,
-                      venueId: user.venueId,
-                    )));
-                Navigator.pop(context);
-              },
-              child: const Text("QO'SHISH"),
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.bg))
+                  : const Text("QO'SHISH"),
             ),
           ),
         ],
@@ -1082,6 +1240,11 @@ class _ActivityTabState extends State<_ActivityTab> {
             "Kun tugash vaqti o'zgardi",
             Icons.schedule,
             AppTheme.textSecondary
+          ),
+        ActivityType.expenseDeleted => (
+            "Xarajat o'chirildi",
+            Icons.delete_outline,
+            AppTheme.red
           ),
         _ => (type, Icons.info_outline, AppTheme.textSecondary),
       };
