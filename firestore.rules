@@ -1,0 +1,95 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // The caller's own profile. Fails (and so denies) if they have none.
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function inVenue(venueId) {
+      return signedIn() && me().venueId == venueId
+        && me().get('isActive', true) != false;
+    }
+
+    function isManager(venueId) {
+      return inVenue(venueId) && me().role in ['manager', 'owner'];
+    }
+
+    // Mirrors AppUser.canVoid / canApplyDiscount: everyone except plain staff.
+    function canOverride(venueId) {
+      return inVenue(venueId) && me().role in ['supervisor', 'manager', 'owner'];
+    }
+
+    function changedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ── Staff profiles ──────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if signedIn()
+        && (request.auth.uid == uid || isManager(resource.data.venueId));
+
+      // Managers add staff to their own venue; only an owner can add an owner.
+      allow create: if isManager(request.resource.data.venueId)
+        && (request.resource.data.role != 'owner' || me().role == 'owner');
+
+      // Anyone may stamp their own lastLogin; everything else is a manager's
+      // call, and nobody can be moved to another venue.
+      allow update: if signedIn() && (
+        (request.auth.uid == uid && changedOnly(['lastLogin']))
+        || (isManager(resource.data.venueId)
+            && request.resource.data.venueId == resource.data.venueId
+            && (request.resource.data.role != 'owner' || me().role == 'owner'))
+      );
+
+      allow delete: if false;
+    }
+
+    // ── Venue data ──────────────────────────────────────────────────────
+    match /venues/{venueId} {
+      allow read: if inVenue(venueId);
+      allow update: if isManager(venueId);
+      allow create, delete: if false;
+
+      match /tables/{tableId} {
+        allow read: if inVenue(venueId);
+        allow create, delete: if isManager(venueId);
+        // Staff only move a table between open / active / reserved; name,
+        // price and the rest belong to managers.
+        allow update: if isManager(venueId)
+          || (inVenue(venueId)
+              && changedOnly(['status', 'currentSessionId', 'reservationId']));
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if inVenue(venueId);
+        allow create: if inVenue(venueId)
+          && request.resource.data.status == 'active'
+          && request.resource.data.openedBy == request.auth.uid;
+        // A closed session is history: nobody edits it afterwards. Staff run
+        // the session but cannot discount or void it.
+        allow update: if inVenue(venueId) && resource.data.status == 'active'
+          && (canOverride(venueId)
+              || (request.resource.data.status != 'voided'
+                  && request.resource.data.get('discount', 0)
+                      == resource.data.get('discount', 0)));
+        allow delete: if false;
+      }
+
+      match /menu/{itemId} {
+        allow read: if inVenue(venueId);
+        allow write: if isManager(venueId);
+      }
+
+      match /bookings/{bookingId} {
+        allow read, write: if inVenue(venueId);
+      }
+    }
+  }
+}

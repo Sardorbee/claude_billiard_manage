@@ -27,6 +27,11 @@ class AppRouter {
         if (authState is AuthAuthenticated && isLoggingIn) {
           return '/floor';
         }
+        if (authState is AuthAuthenticated &&
+            state.matchedLocation.startsWith('/admin') &&
+            !authState.user.canAccessAdmin) {
+          return '/floor';
+        }
         return null;
       },
       refreshListenable: GoRouterRefreshStream(authBloc.stream),

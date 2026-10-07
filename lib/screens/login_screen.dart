@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../blocs/blocs.dart';
+import '../../repositories/repositories.dart';
 import '../../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -117,7 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton(
-                            onPressed: () {/* TODO: forgot password */},
+                            onPressed: _forgotPassword,
                             child: const Text('Forgot password?', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
                           ),
                         ),
@@ -146,6 +148,26 @@ class _LoginScreenState extends State<LoginScreen> {
         },
       ),
     );
+  }
+
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+    final messenger = ScaffoldMessenger.of(context);
+    if (email.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Enter your email first'),
+          backgroundColor: AppTheme.red));
+      return;
+    }
+    try {
+      await context.read<AuthRepository>().resetPassword(email);
+      messenger.showSnackBar(
+          SnackBar(content: Text('Password reset link sent to $email')));
+    } on FirebaseAuthException catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(e.message ?? 'Could not send the reset link'),
+          backgroundColor: AppTheme.red));
+    }
   }
 
   void _submit() {

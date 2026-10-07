@@ -1,0 +1,23 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "venues": {
+      "$venueId": {
+        "sessions": {
+          ".read": "auth != null",
+          "$tableId": {
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['sessionId', 'startedAt', 'status'])",
+            "sessionId": { ".validate": "newData.isString()" },
+            "startedAt": { ".validate": "newData.isNumber()" },
+            "pausedAt": { ".validate": "newData.isNumber()" },
+            "totalPausedMs": { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "status": { ".validate": "newData.val() === 'active' || newData.val() === 'paused'" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    }
+  }
+}

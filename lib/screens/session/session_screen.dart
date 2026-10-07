@@ -17,7 +17,17 @@ class SessionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<SessionBloc, SessionState>(
+      // A failed action on a running session is shown as a message; the
+      // session view stays up instead of being replaced by the error page.
+      buildWhen: (prev, curr) =>
+          !(prev is SessionActive && curr is SessionError),
+      listenWhen: (prev, curr) =>
+          curr is! SessionError || prev is SessionActive,
       listener: (context, state) {
+        if (state is SessionError) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(state.message), backgroundColor: AppTheme.red));
+        }
         if (state is SessionCompleted) {
           _showReceiptSheet(context, state.session);
         }
@@ -108,6 +118,8 @@ class _ActiveSessionView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = state.session;
+    final authState = context.watch<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
     return Scaffold(
       backgroundColor: AppTheme.bg,
       appBar: AppBar(
@@ -140,9 +152,12 @@ class _ActiveSessionView extends StatelessWidget {
             onSelected: (val) => _handleMenu(context, val),
             itemBuilder: (_) => [
               _menuItem('notes', Icons.note_outlined, 'Add Note'),
-              _menuItem('discount', Icons.discount_outlined, 'Apply Discount'),
-              _menuItem('void', Icons.delete_outline, 'Void Session',
-                  color: AppTheme.red),
+              if (user?.canApplyDiscount ?? false)
+                _menuItem(
+                    'discount', Icons.discount_outlined, 'Apply Discount'),
+              if (user?.canVoid ?? false)
+                _menuItem('void', Icons.delete_outline, 'Void Session',
+                    color: AppTheme.red),
             ],
           ),
         ],

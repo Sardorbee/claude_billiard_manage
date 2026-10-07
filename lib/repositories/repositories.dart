@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_database/firebase_database.dart' hide Transaction;
 import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 
@@ -41,16 +41,29 @@ class AuthRepository {
     required UserRole role,
     required String venueId,
   }) async {
-    final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
-    final user = AppUser(
-      uid: cred.user!.uid,
-      name: name,
-      email: email,
-      role: role,
-      venueId: venueId,
+    // createUserWithEmailAndPassword signs the new account in, so it runs on a
+    // throwaway app to leave the manager's own session untouched.
+    final secondary = await Firebase.initializeApp(
+      name: 'staff-creator-${_uuid.v4()}',
+      options: Firebase.app().options,
     );
-    await _db.collection('users').doc(user.uid).set(user.toFirestore());
-    return user;
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondary);
+      final cred = await secondaryAuth.createUserWithEmailAndPassword(email: email, password: password);
+      final user = AppUser(
+        uid: cred.user!.uid,
+        name: name,
+        email: email,
+        role: role,
+        venueId: venueId,
+      );
+      // Written as the manager, which is what the security rules require.
+      await _db.collection('users').doc(user.uid).set(user.toFirestore());
+      await secondaryAuth.signOut();
+      return user;
+    } finally {
+      await secondary.delete();
+    }
   }
 
   Future<void> updateUser(AppUser user) =>
@@ -158,9 +171,20 @@ class SessionRepository {
 
     );
 
-    // Firestore: full session doc
-    await _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
-        .set(session.toFirestore());
+    final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
+    final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(table.id);
+
+    // Session doc + table status together, and only if nobody else opened
+    // this table first.
+    await _db.runTransaction((tx) async {
+      final tableSnap = await tx.get(tableRef);
+      final t = tableSnap.data();
+      if (t != null && t['status'] == 'active' && t['currentSessionId'] != null) {
+        throw Exception('${table.name} already has an active session');
+      }
+      tx.set(sessionRef, session.toFirestore());
+      tx.update(tableRef, {'status': 'active', 'currentSessionId': sessionId});
+    });
 
     // RTDB: live state
     await _liveRef(venueId, table.id).set({
@@ -169,12 +193,6 @@ class SessionRepository {
       'pausedAt': null,
       'totalPausedMs': 0,
       'status': 'active',
-    });
-
-    // Update table status
-    await _db.collection('venues').doc(venueId).collection('tables').doc(table.id).update({
-      'status': 'active',
-      'currentSessionId': sessionId,
     });
 
     return session;
@@ -200,19 +218,22 @@ class SessionRepository {
   }
 
   Future<void> addOrderItems(String venueId, String sessionId, List<OrderItem> items) async {
-    final doc = await _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId).get();
-    final session = SessionModel.fromFirestore(doc);
-    final existing = List<OrderItem>.from(session.orderItems);
-    for (final item in items) {
-      final idx = existing.indexWhere((e) => e.menuItemId == item.menuItemId);
-      if (idx >= 0) {
-        existing[idx] = existing[idx].copyWith(quantity: existing[idx].quantity + item.quantity);
-      } else {
-        existing.add(item);
+    final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
+    // Read-modify-write in a transaction so two devices adding items at once
+    // don't overwrite each other.
+    await _db.runTransaction((tx) async {
+      final session = SessionModel.fromFirestore(await tx.get(sessionRef));
+      final existing = List<OrderItem>.from(session.orderItems);
+      for (final item in items) {
+        final idx = existing.indexWhere((e) => e.menuItemId == item.menuItemId);
+        if (idx >= 0) {
+          existing[idx] = existing[idx].copyWith(quantity: existing[idx].quantity + item.quantity);
+        } else {
+          existing.add(item);
+        }
       }
-    }
-    await _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
-        .update({'orderItems': existing.map((e) => e.toMap()).toList()});
+      tx.update(sessionRef, {'orderItems': existing.map((e) => e.toMap()).toList()});
+    });
   }
 
   Stream<SessionModel?> watchActiveSession(String venueId, String sessionId) {
@@ -226,17 +247,19 @@ class SessionRepository {
   }
 
   Future<void> transferSession(String venueId, String sessionId, String fromTableId, String toTableId, String toTableName) async {
-    final batch = _db.batch();
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
-    batch.update(sessionRef, {'tableId': toTableId, 'tableName': toTableName});
-
     final fromRef = _db.collection('venues').doc(venueId).collection('tables').doc(fromTableId);
-    batch.update(fromRef, {'status': 'open', 'currentSessionId': null});
-
     final toRef = _db.collection('venues').doc(venueId).collection('tables').doc(toTableId);
-    batch.update(toRef, {'status': 'active', 'currentSessionId': sessionId});
 
-    await batch.commit();
+    await _db.runTransaction((tx) async {
+      final to = (await tx.get(toRef)).data();
+      if (to != null && to['status'] == 'active' && to['currentSessionId'] != null) {
+        throw Exception('$toTableName already has an active session');
+      }
+      tx.update(sessionRef, {'tableId': toTableId, 'tableName': toTableName});
+      tx.update(fromRef, {'status': 'open', 'currentSessionId': null});
+      tx.update(toRef, {'status': 'active', 'currentSessionId': sessionId});
+    });
 
     // Move RTDB live state
     final snapshot = await _liveRef(venueId, fromTableId).get();
@@ -270,23 +293,22 @@ class SessionRepository {
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
     final tableRef   = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
 
-    final batch = _db.batch();
-    batch.update(sessionRef, {
-      'status':             'completed',
-      'endedAt':            Timestamp.fromDate(now),
-      'finalTotal':         finalTotal,
-      'totalPausedSeconds': session.totalPausedSeconds,  // ← save paused seconds
-    });
-    batch.update(tableRef, {
-      'status':           'open',
-      'currentSessionId': null,
+    await _db.runTransaction((tx) async {
+      await _ensureActive(tx, sessionRef);
+      tx.update(sessionRef, {
+        'status':             'completed',
+        'endedAt':            Timestamp.fromDate(now),
+        'finalTotal':         finalTotal,
+        'totalPausedSeconds': session.totalPausedSeconds,  // ← save paused seconds
+      });
+      tx.update(tableRef, {
+        'status':           'open',
+        'currentSessionId': null,
+      });
     });
 
-    // Run Firestore batch and RTDB removal in parallel
-    await Future.wait([
-      batch.commit(),
-      _liveRef(venueId, tableId).remove(),
-    ]);
+    // Only after Firestore has committed, so a failed checkout keeps its timer.
+    await _liveRef(venueId, tableId).remove();
 
     // Return locally — no extra Firestore read needed
     return session.copyWith(
@@ -296,13 +318,22 @@ class SessionRepository {
   }
 
   Future<void> voidSession(String venueId, String sessionId, String tableId) async {
-    final batch = _db.batch();
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
-    batch.update(sessionRef, {'status': 'voided', 'endedAt': Timestamp.fromDate(DateTime.now())});
     final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
-    batch.update(tableRef, {'status': 'open', 'currentSessionId': null});
-    await batch.commit();
+    await _db.runTransaction((tx) async {
+      await _ensureActive(tx, sessionRef);
+      tx.update(sessionRef, {'status': 'voided', 'endedAt': Timestamp.fromDate(DateTime.now())});
+      tx.update(tableRef, {'status': 'open', 'currentSessionId': null});
+    });
     await _liveRef(venueId, tableId).remove();
+  }
+
+  // Stops a second device from closing a session that is already closed.
+  Future<void> _ensureActive(Transaction tx, DocumentReference<Map<String, dynamic>> sessionRef) async {
+    final status = (await tx.get(sessionRef)).data()?['status'];
+    if (status != 'active') {
+      throw Exception('This session is already ${status ?? 'closed'}');
+    }
   }
 
   // History queries
@@ -374,6 +405,8 @@ class MenuRepository {
 class BookingRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  static const reserveLeadTime = Duration(hours: 1);
+
   Stream<List<Booking>> watchBookings(String venueId) {
     return _db
         .collection('venues')
@@ -407,28 +440,49 @@ class BookingRepository {
       guestCount: booking.guestCount, depositAmount: booking.depositAmount,
       notes: booking.notes, createdBy: booking.createdBy, venueId: venueId,
     );
-    await ref.set(newBooking.toFirestore());
+    final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(booking.tableId);
 
-    // Update table status to reserved
-    await _db.collection('venues').doc(venueId).collection('tables').doc(booking.tableId)
-        .update({'status': 'reserved', 'reservationId': ref.id});
+    // Only a booking that starts soon holds the table; a booking for a later
+    // day must not block it now.
+    final startsSoon = booking.scheduledAt.difference(DateTime.now()) <= reserveLeadTime;
+    await _db.runTransaction((tx) async {
+      final table = (await tx.get(tableRef)).data();
+      tx.set(ref, newBooking.toFirestore());
+      if (startsSoon && table != null && table['status'] == 'open') {
+        tx.update(tableRef, {'status': 'reserved', 'reservationId': ref.id});
+      }
+    });
 
     return newBooking;
   }
 
   Future<void> updateBookingStatus(String venueId, String bookingId, String status, String tableId) async {
-    await _db.collection('venues').doc(venueId).collection('bookings').doc(bookingId)
-        .update({'status': status});
-    if (status == 'cancelled' || status == 'completed' || status == 'no_show') {
-      await _db.collection('venues').doc(venueId).collection('tables').doc(tableId)
-          .update({'status': 'open', 'reservationId': null});
-    }
+    final bookingRef = _db.collection('venues').doc(venueId).collection('bookings').doc(bookingId);
+    final closes = status == 'cancelled' || status == 'completed' || status == 'no_show';
+    await _db.runTransaction((tx) async {
+      if (closes) await _releaseTable(tx, venueId, tableId, bookingId);
+      tx.update(bookingRef, {'status': status});
+    });
   }
 
   Future<void> deleteBooking(String venueId, String bookingId, String tableId) async {
-    await _db.collection('venues').doc(venueId).collection('bookings').doc(bookingId).delete();
-    await _db.collection('venues').doc(venueId).collection('tables').doc(tableId)
-        .update({'status': 'open', 'reservationId': null});
+    final bookingRef = _db.collection('venues').doc(venueId).collection('bookings').doc(bookingId);
+    await _db.runTransaction((tx) async {
+      await _releaseTable(tx, venueId, tableId, bookingId);
+      tx.delete(bookingRef);
+    });
+  }
+
+  // Frees the table only if this booking is what holds it, so closing a
+  // booking never reopens a table that has a session running.
+  Future<void> _releaseTable(Transaction tx, String venueId, String tableId, String bookingId) async {
+    final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
+    final table = (await tx.get(tableRef)).data();
+    if (table == null || table['reservationId'] != bookingId) return;
+    tx.update(tableRef, {
+      'reservationId': null,
+      if (table['status'] == 'reserved') 'status': 'open',
+    });
   }
 }
 

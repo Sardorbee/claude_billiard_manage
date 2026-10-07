@@ -454,6 +454,9 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     ));
   }
 
+  String _message(Object e) =>
+      e.toString().replaceAll('Exception:', '').trim();
+
   void _startTicker() {
     _ticker?.cancel();
     _ticker =
@@ -509,7 +512,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       _startTicker();
       emit(SessionActive(session: session, elapsedSeconds: 0));
     } catch (e) {
-      emit(SessionError(e.toString()));
+      emit(SessionError(_message(e)));
     }
   }
 
@@ -552,8 +555,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   Future<void> _onAddItems(
       SessionAddItemsRequested event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null) return;
-    await _sessionRepo.addOrderItems(_venueId!, _sessionId!, event.items);
-    _session = await _sessionRepo.getSession(_venueId!, _sessionId!);
+    try {
+      await _sessionRepo.addOrderItems(_venueId!, _sessionId!, event.items);
+      _session = await _sessionRepo.getSession(_venueId!, _sessionId!);
+    } catch (e) {
+      emit(SessionError(_message(e)));
+      return;
+    }
     if (state is SessionActive) {
       final s = state as SessionActive;
       emit(SessionActive(
@@ -567,8 +575,13 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   Future<void> _onTransfer(
       SessionTransferRequested event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null || _tableId == null) return;
-    await _sessionRepo.transferSession(
-        _venueId!, _sessionId!, _tableId!, event.toTableId, event.toTableName);
+    try {
+      await _sessionRepo.transferSession(_venueId!, _sessionId!, _tableId!,
+          event.toTableId, event.toTableName);
+    } catch (e) {
+      emit(SessionError(_message(e)));
+      return;
+    }
     _tableId = event.toTableId;
     _startListeners(_venueId!, event.toTableId, _sessionId!);
     if (state is SessionActive) {
@@ -621,23 +634,31 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
       totalPausedSeconds: s.pausedSeconds,
     );
 
-    final completed = await _sessionRepo.checkoutSession(
-      venueId: _venueId!,
-      sessionId: _sessionId!,
-      tableId: _tableId!,
-      session: sessionToSave,
-      finalTotal: s.total,
-    );
-    _ticker?.cancel();
-    emit(SessionCompleted(completed));
+    try {
+      final completed = await _sessionRepo.checkoutSession(
+        venueId: _venueId!,
+        sessionId: _sessionId!,
+        tableId: _tableId!,
+        session: sessionToSave,
+        finalTotal: s.total,
+      );
+      _ticker?.cancel();
+      emit(SessionCompleted(completed));
+    } catch (e) {
+      emit(SessionError(_message(e)));
+    }
   }
 
   Future<void> _onVoid(
       SessionVoidRequested event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null || _tableId == null) return;
-    await _sessionRepo.voidSession(_venueId!, _sessionId!, _tableId!);
-    _ticker?.cancel();
-    emit(SessionInitial());
+    try {
+      await _sessionRepo.voidSession(_venueId!, _sessionId!, _tableId!);
+      _ticker?.cancel();
+      emit(SessionInitial());
+    } catch (e) {
+      emit(SessionError(_message(e)));
+    }
   }
 
   void _onLiveUpdate(_SessionLiveUpdated event, Emitter<SessionState> emit) {

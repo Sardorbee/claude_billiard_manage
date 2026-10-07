@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../blocs/blocs.dart';
@@ -796,13 +797,24 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
             venueId: user.venueId,
           );
       if (mounted) Navigator.pop(context);
+    } on FirebaseAuthException catch (e) {
+      // Thrown when sign-up is switched off in the Firebase console.
+      final signUpOff = e.code == 'admin-restricted-operation' ||
+          e.code == 'operation-not-allowed';
+      _showError(signUpOff
+          ? 'New accounts are switched off for this project. '
+              'Create the login in the Firebase console instead.'
+          : e.message ?? e.code);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.red),
-        );
-      }
+      _showError(e.toString());
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppTheme.red),
+    );
   }
 }

@@ -1,1 +1,31 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"billiard-manage","appId":"1:703178842530:android:bf07f5abdad6746e6012fb","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"billiard-manage","configurations":{"android":"1:703178842530:android:bf07f5abdad6746e6012fb","ios":"1:703178842530:ios:4dd58d7d7c978c966012fb","macos":"1:703178842530:ios:4dd58d7d7c978c966012fb","web":"1:703178842530:web:0f066641eaefde126012fb","windows":"1:703178842530:web:3fd95e7425e8979b6012fb"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "billiard-manage",
+          "appId": "1:703178842530:android:bf07f5abdad6746e6012fb",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "billiard-manage",
+          "configurations": {
+            "android": "1:703178842530:android:bf07f5abdad6746e6012fb",
+            "ios": "1:703178842530:ios:4dd58d7d7c978c966012fb",
+            "macos": "1:703178842530:ios:4dd58d7d7c978c966012fb",
+            "web": "1:703178842530:web:0f066641eaefde126012fb",
+            "windows": "1:703178842530:web:3fd95e7425e8979b6012fb"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "database": {
+    "rules": "database.rules.json"
+  }
+}
