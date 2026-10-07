@@ -54,8 +54,10 @@ service cloud.firestore {
     // ── Venue data ──────────────────────────────────────────────────────
     match /venues/{venueId} {
       allow read: if inVenue(venueId);
-      allow update: if isManager(venueId);
-      allow create, delete: if false;
+      // isManager ties the caller to this venue id, so "create" only ever
+      // fills in the document for a venue they already manage.
+      allow create, update: if isManager(venueId);
+      allow delete: if false;
 
       match /tables/{tableId} {
         allow read: if inVenue(venueId);
@@ -69,9 +71,13 @@ service cloud.firestore {
 
       match /sessions/{sessionId} {
         allow read: if inVenue(venueId);
+        // A table session starts active; a counter sale (no table) is
+        // written already completed.
         allow create: if inVenue(venueId)
-          && request.resource.data.status == 'active'
-          && request.resource.data.openedBy == request.auth.uid;
+          && request.resource.data.openedBy == request.auth.uid
+          && (request.resource.data.status == 'active'
+              || (request.resource.data.status == 'completed'
+                  && request.resource.data.tableId == ''));
         // A closed session is history: nobody edits it afterwards. Staff run
         // the session but cannot discount or void it.
         allow update: if inVenue(venueId) && resource.data.status == 'active'
@@ -85,6 +91,27 @@ service cloud.firestore {
       match /menu/{itemId} {
         allow read: if inVenue(venueId);
         allow write: if isManager(venueId);
+      }
+
+      // Balances move with every debt and payment, so all staff write them.
+      match /customers/{customerId} {
+        allow read, create, update: if inVenue(venueId);
+        allow delete: if false;
+      }
+
+      // The ledger is append-only. Anyone on staff records a payment or a
+      // debt that comes from a sale; a debt typed in by hand or a write-off
+      // needs someone above staff.
+      match /debtEntries/{entryId} {
+        allow read: if inVenue(venueId);
+        allow create: if inVenue(venueId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.amount > 0
+          && (request.resource.data.type == 'payment'
+              || (request.resource.data.type == 'debt'
+                  && request.resource.data.sessionId != null)
+              || canOverride(venueId));
+        allow update, delete: if false;
       }
 
       match /bookings/{bookingId} {

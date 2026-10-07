@@ -91,6 +91,10 @@ class TableModel {
       );
 }
 
+// ─── PAYMENT ─────────────────────────────────────────────────────────────────
+
+enum PaymentMethod { cash, transfer, debt }
+
 // ─── SESSION ─────────────────────────────────────────────────────────────────
 class SessionSplit {
   final String id;
@@ -147,6 +151,12 @@ class SessionModel {
   final String openedBy; // staff uid
   final String venueId;
   final List<SessionSplit> splits; // all recorded splits
+  final double? finalTotal; // what was charged at checkout
+  final PaymentMethod? paymentMethod; // set at checkout
+  final String? debtorName; // who owes, when paymentMethod is debt
+
+  // A sale made at the counter with no table and no time charge.
+  bool get isCounterSale => tableId.isEmpty;
 
 // Total already-split time charge
   double get splitTotal => splits.fold(0, (sum, s) => sum + s.total);
@@ -167,22 +177,21 @@ class SessionModel {
       this.status = 'active',
       required this.openedBy,
       required this.venueId,
-      this.splits = const []});
+      this.splits = const [],
+      this.finalTotal,
+      this.paymentMethod,
+      this.debtorName});
 
   // ─── Billing calculation (all local) ───────────────────────────
+  // Wall-clock seconds from start to end, paused time included.
   double get elapsedSeconds {
     final end = endedAt ?? DateTime.now();
-    final raw = end.difference(startedAt).inSeconds - totalPausedSeconds;
+    final raw = end.difference(startedAt).inSeconds;
     return raw < 0 ? 0 : raw.toDouble();
   }
 
 // Seconds elapsed since the last split (or session start if no splits)
-  num get secondsSinceLastSplit {
-    if (splits.isEmpty) return elapsedSeconds;
-    final lastSplitAt = splits.last.splitAt;
-    final diff = DateTime.now().difference(lastSplitAt).inSeconds;
-    return diff < 0 ? 0 : diff;
-  }
+  num get secondsSinceLastSplit => currentLegSeconds;
 
   // Total seconds the session was paused
   double get pausedSeconds => totalPausedSeconds.toDouble();
@@ -191,7 +200,7 @@ class SessionModel {
   num get currentLegSeconds {
     if (splits.isEmpty) return elapsedSeconds;
     final lastSplitAt = splits.last.splitAt;
-    final diff = DateTime.now().difference(lastSplitAt).inSeconds;
+    final diff = (endedAt ?? DateTime.now()).difference(lastSplitAt).inSeconds;
     return diff < 0 ? 0 : diff;
   }
 
@@ -205,7 +214,10 @@ class SessionModel {
       (pausedSeconds / 3600) * hourlyRate * pausedRateMultiplier;
 
 // Active (non-paused) seconds only
-  double get activeSeconds => elapsedSeconds - pausedSeconds;
+  double get activeSeconds {
+    final active = elapsedSeconds - pausedSeconds;
+    return active < 0 ? 0 : active;
+  }
 
 // Active time charge (only counts non-paused time)
   double get activeTimeCharge => (activeSeconds / 3600) * hourlyRate;
@@ -217,9 +229,27 @@ class SessionModel {
 
   double get subtotal => timeCharge + fbTotal;
 
-  double get discountAmount => discount > 0 ? subtotal * (discount / 100) : 0;
+  // The discount comes off table time only, never food and drink.
+  double get discountAmount =>
+      discount > 0 ? timeCharge * (discount / 100) : 0;
+
+  // Table time after the discount: the "table time" line of a report.
+  double get netTimeCharge => timeCharge - discountAmount;
 
   double get total => subtotal - discountAmount;
+
+  // The amount actually charged; older sessions without one fall back to
+  // the calculated total.
+  double get paidTotal => finalTotal ?? total;
+
+  // Food and drink sales by menu category.
+  Map<String, double> get fbByCategory {
+    final map = <String, double>{};
+    for (final i in orderItems) {
+      map[i.category] = (map[i.category] ?? 0) + i.subtotal;
+    }
+    return map;
+  }
 
   bool get isPaused => pausedAt != null && status == 'active';
 
@@ -248,6 +278,11 @@ class SessionModel {
       splits: ((d['splits'] as List?) ?? [])
           .map((s) => SessionSplit.fromMap(s as Map<String, dynamic>))
           .toList(),
+      finalTotal: (d['finalTotal'] as num?)?.toDouble(),
+      paymentMethod: PaymentMethod.values
+          .where((m) => m.name == d['paymentMethod'])
+          .firstOrNull,
+      debtorName: d['debtorName'],
     );
   }
 
@@ -267,6 +302,9 @@ class SessionModel {
         'openedBy': openedBy,
         'venueId': venueId,
         'splits': splits.map((s) => s.toMap()).toList(),
+        if (finalTotal != null) 'finalTotal': finalTotal,
+        if (paymentMethod != null) 'paymentMethod': paymentMethod!.name,
+        if (debtorName != null) 'debtorName': debtorName,
       };
 
   SessionModel copyWith({
@@ -286,6 +324,9 @@ class SessionModel {
     String? openedBy,
     String? venueId,
     List<SessionSplit>? splits,
+    double? finalTotal,
+    PaymentMethod? paymentMethod,
+    String? debtorName,
   }) =>
       SessionModel(
         id: id ?? this.id,
@@ -304,6 +345,9 @@ class SessionModel {
         openedBy: openedBy ?? this.openedBy,
         venueId: venueId ?? this.venueId,
         splits: splits ?? this.splits,
+        finalTotal: finalTotal ?? this.finalTotal,
+        paymentMethod: paymentMethod ?? this.paymentMethod,
+        debtorName: debtorName ?? this.debtorName,
       );
 }
 
@@ -504,6 +548,106 @@ class Booking {
       );
 }
 
+// ─── CUSTOMER DEBTS ──────────────────────────────────────────────────────────
+
+class Customer {
+  final String id;
+  final String name;
+  final String? phone;
+  final double balance; // what the customer still owes
+  final DateTime? updatedAt;
+
+  const Customer({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.balance = 0,
+    this.updatedAt,
+  });
+
+  bool get owes => balance > 0;
+
+  factory Customer.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return Customer(
+      id: doc.id,
+      name: d['name'] ?? '',
+      phone: d['phone'],
+      balance: (d['balance'] ?? 0).toDouble(),
+      updatedAt: (d['updatedAt'] as Timestamp?)?.toDate(),
+    );
+  }
+}
+
+// debt: the customer owes more. payment: money received against the debt.
+// writeoff: the balance is reduced without money changing hands.
+enum DebtEntryType { debt, payment, writeoff }
+
+// One line of a customer's ledger. Entries are never edited or deleted.
+class DebtEntry {
+  final String id;
+  final String customerId;
+  final String customerName;
+  final DebtEntryType type;
+  final double amount; // always positive; the type gives the direction
+  final String? note;
+  final String? sessionId; // the checkout or counter sale that created it
+  final PaymentMethod? paymentMethod; // how a payment was received
+  final String createdBy;
+  final String createdByName;
+  final DateTime createdAt;
+
+  const DebtEntry({
+    required this.id,
+    required this.customerId,
+    required this.customerName,
+    required this.type,
+    required this.amount,
+    this.note,
+    this.sessionId,
+    this.paymentMethod,
+    required this.createdBy,
+    required this.createdByName,
+    required this.createdAt,
+  });
+
+  // Effect on the customer's balance.
+  double get delta => type == DebtEntryType.debt ? amount : -amount;
+
+  factory DebtEntry.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return DebtEntry(
+      id: doc.id,
+      customerId: d['customerId'] ?? '',
+      customerName: d['customerName'] ?? '',
+      type: DebtEntryType.values.firstWhere((t) => t.name == d['type'],
+          orElse: () => DebtEntryType.debt),
+      amount: (d['amount'] ?? 0).toDouble(),
+      note: d['note'],
+      sessionId: d['sessionId'],
+      paymentMethod: PaymentMethod.values
+          .where((m) => m.name == d['paymentMethod'])
+          .firstOrNull,
+      createdBy: d['createdBy'] ?? '',
+      createdByName: d['createdByName'] ?? '',
+      createdAt: (d['createdAt'] as Timestamp).toDate(),
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'customerId': customerId,
+        'customerName': customerName,
+        'type': type.name,
+        'amount': amount,
+        'note': note,
+        'sessionId': sessionId,
+        'paymentMethod': paymentMethod?.name,
+        'createdBy': createdBy,
+        'createdByName': createdByName,
+        'createdAt': Timestamp.fromDate(createdAt),
+      };
+}
+
 // ─── APP USER ────────────────────────────────────────────────────────────────
 
 enum UserRole { staff, supervisor, manager, owner }
@@ -530,6 +674,8 @@ class AppUser {
   bool get canAccessAdmin => role == UserRole.manager || role == UserRole.owner;
   bool get canVoid => role != UserRole.staff;
   bool get canApplyDiscount => role != UserRole.staff;
+  // Adding a debt by hand or writing one off; staff only take payments.
+  bool get canManageDebts => role != UserRole.staff;
 
   factory AppUser.fromFirestore(DocumentSnapshot doc) {
     final d = doc.data() as Map<String, dynamic>;
@@ -570,6 +716,9 @@ class Venue {
   final Map<String, double> zoneRates; // zone -> rate override
   final bool isOpen;
   final String? logoUrl;
+  final List<String> menuCategories; // the admin's list; menu items pick one
+
+  static const defaultMenuCategories = ['Non-dog', 'Ichimliklar', 'Sigaret'];
 
   const Venue({
     required this.id,
@@ -580,10 +729,12 @@ class Venue {
     this.zoneRates = const {},
     this.isOpen = true,
     this.logoUrl,
+    this.menuCategories = defaultMenuCategories,
   });
 
   factory Venue.fromFirestore(DocumentSnapshot doc) {
-    final d = doc.data() as Map<String, dynamic>;
+    final d = (doc.data() as Map<String, dynamic>?) ?? {};
+    final categories = (d['menuCategories'] as List?)?.cast<String>();
     return Venue(
       id: doc.id,
       name: d['name'] ?? '',
@@ -593,6 +744,9 @@ class Venue {
       zoneRates: Map<String, double>.from(d['zoneRates'] ?? {}),
       isOpen: d['isOpen'] ?? true,
       logoUrl: d['logoUrl'],
+      menuCategories: categories == null || categories.isEmpty
+          ? defaultMenuCategories
+          : categories,
     );
   }
 
@@ -604,5 +758,6 @@ class Venue {
         'zoneRates': zoneRates,
         'isOpen': isOpen,
         'logoUrl': logoUrl,
+        'menuCategories': menuCategories,
       };
 }

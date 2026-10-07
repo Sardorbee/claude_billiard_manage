@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../repositories/repositories.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
+import '../session/session_screen.dart' show AddItemsSheet;
 
 class FloorScreen extends StatelessWidget {
   const FloorScreen({super.key});
@@ -28,6 +29,12 @@ class FloorScreen extends StatelessWidget {
           ],
         ),
         actions: [
+          if (user != null)
+            IconButton(
+              tooltip: 'Stolsiz savdo',
+              icon: const Icon(Icons.point_of_sale_outlined),
+              onPressed: () => _showCounterSale(context, user),
+            ),
           if (user != null)
             Padding(
               padding: const EdgeInsets.only(right: 16),
@@ -98,8 +105,93 @@ class FloorScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
         side: BorderSide(color: AppTheme.border),
       ),
-      builder: (_) => _WalkInSheet(openTables: openTables),
+      builder: (_) => _WalkInSheet(
+        openTables: openTables,
+        onSelected: (table) {
+          final authState = context.read<AuthBloc>().state;
+          if (authState is! AuthAuthenticated) return;
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: AppTheme.surface,
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+              side: BorderSide(color: AppTheme.border),
+            ),
+            builder: (_) =>
+                _OpenSessionSheet(table: table, user: authState.user),
+          );
+        },
+      ),
     );
+  }
+
+  // A sale with no table: pick items, pick how it was paid, save.
+  void _showCounterSale(BuildContext context, AppUser user) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.bg,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
+        side: BorderSide(color: AppTheme.border),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        builder: (__, ctrl) => AddItemsSheet(
+          controller: ctrl,
+          title: 'STOLSIZ SAVDO',
+          subtitle: 'Sale without a table',
+          onConfirm: (items) => _payCounterSale(context, user, items),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _payCounterSale(
+      BuildContext context, AppUser user, List<OrderItem> items) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final repo = context.read<SessionRepository>();
+    final debtorNames =
+        context.read<DebtRepository>().customerNames(user.venueId);
+    final total = items.fold(0.0, (sum, i) => sum + i.subtotal);
+
+    final choice = await showDialog<PaymentChoice>(
+      context: context,
+      builder: (_) => PaymentDialog(
+        title: 'Stolsiz savdo',
+        confirmLabel: 'CONFIRM SALE',
+        debtorNames: debtorNames,
+        summary: [
+          ...items.map((i) => _SaleRow('${i.quantity}× ${i.name}',
+              '\$${i.subtotal.toStringAsFixed(2)}')),
+          const Divider(color: AppTheme.border),
+          _SaleRow('Umumiy summa', '\$${total.toStringAsFixed(2)}',
+              bold: true),
+        ],
+      ),
+    );
+    if (choice == null) return;
+
+    try {
+      await repo.createCounterSale(
+        venueId: user.venueId,
+        items: items,
+        paymentMethod: choice.method,
+        debtorName: choice.debtorName,
+        soldBy: user,
+      );
+      messenger.showSnackBar(SnackBar(
+          content: Text(
+              'Sale saved · \$${total.toStringAsFixed(2)} · ${paymentLabel(choice.method)}')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Sale not saved: $e'),
+          backgroundColor: AppTheme.red));
+    }
   }
 
   void _showUserMenu(BuildContext context, AppUser user) {
@@ -505,9 +597,36 @@ class _CountButton extends StatelessWidget {
   }
 }
 
+class _SaleRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool bold;
+  const _SaleRow(this.label, this.value, {this.bold = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: AppTheme.textPrimary,
+      fontSize: bold ? 15 : 13,
+      fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(child: Text(label, style: style)),
+          Text(value, style: style),
+        ],
+      ),
+    );
+  }
+}
+
 class _WalkInSheet extends StatelessWidget {
   final List<TableModel> openTables;
-  const _WalkInSheet({required this.openTables});
+  final ValueChanged<TableModel> onSelected;
+  const _WalkInSheet({required this.openTables, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +663,10 @@ class _WalkInSheet extends StatelessWidget {
             subtitle: Text('\$${t.hourlyRate.toStringAsFixed(2)}/hr · ${t.type.name}',
                 style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             trailing: const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.textMuted),
-            onTap: () => Navigator.pop(context),
+            onTap: () {
+              Navigator.pop(context);
+              onSelected(t);
+            },
           )),
         ],
       ),

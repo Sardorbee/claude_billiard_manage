@@ -648,3 +648,152 @@ String formatTime(int seconds) {
 
 String formatDate(DateTime dt) => DateFormat('MMM d, yyyy · h:mm a').format(dt);
 String formatTimeOnly(DateTime dt) => DateFormat('h:mm a').format(dt);
+
+// ─── Payment dialog ──────────────────────────────────────────────────────────
+
+typedef PaymentChoice = ({PaymentMethod method, String? debtorName});
+
+String paymentLabel(PaymentMethod method) => switch (method) {
+      PaymentMethod.cash => 'Naqd',
+      PaymentMethod.transfer => "O'tkazma",
+      PaymentMethod.debt => 'Qarz',
+    };
+
+/// Shows [summary] and asks how the customer paid. Pops with a
+/// [PaymentChoice], or null if cancelled.
+class PaymentDialog extends StatefulWidget {
+  final String title;
+  final List<Widget> summary;
+  final String confirmLabel;
+  // Existing debtors, offered as suggestions so a regular isn't entered
+  // twice under two spellings.
+  final Future<List<String>>? debtorNames;
+  const PaymentDialog({
+    super.key,
+    required this.title,
+    required this.summary,
+    required this.confirmLabel,
+    this.debtorNames,
+  });
+
+  @override
+  State<PaymentDialog> createState() => _PaymentDialogState();
+}
+
+class _PaymentDialogState extends State<PaymentDialog> {
+  PaymentMethod _method = PaymentMethod.cash;
+  final _debtorCtrl = TextEditingController();
+  bool _debtorMissing = false;
+  List<String> _known = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    widget.debtorNames?.then((names) {
+      if (mounted) setState(() => _known = names);
+    }).catchError((_) {});
+    _debtorCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _debtorCtrl.dispose();
+    super.dispose();
+  }
+
+  List<String> get _suggestions {
+    final q = _debtorCtrl.text.trim().toLowerCase();
+    return _known
+        .where((n) => n.toLowerCase().contains(q) && n.toLowerCase() != q)
+        .take(6)
+        .toList();
+  }
+
+  void _confirm() {
+    final debtor = _debtorCtrl.text.trim();
+    if (_method == PaymentMethod.debt && debtor.isEmpty) {
+      setState(() => _debtorMissing = true);
+      return;
+    }
+    Navigator.pop<PaymentChoice>(context, (
+      method: _method,
+      debtorName: _method == PaymentMethod.debt ? debtor : null,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ...widget.summary,
+            const SizedBox(height: 16),
+            const Text("TO'LOV TURI",
+                style: TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 10,
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: PaymentMethod.values
+                  .map((m) => ChoiceChip(
+                        label: Text(paymentLabel(m)),
+                        selected: _method == m,
+                        selectedColor: AppTheme.green,
+                        backgroundColor: AppTheme.surface2,
+                        labelStyle: TextStyle(
+                            color: _method == m
+                                ? AppTheme.bg
+                                : AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700),
+                        onSelected: (_) => setState(() {
+                          _method = m;
+                          _debtorMissing = false;
+                        }),
+                      ))
+                  .toList(),
+            ),
+            if (_method == PaymentMethod.debt) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _debtorCtrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Kim qarzdor?',
+                  errorText: _debtorMissing ? 'Ismni kiriting' : null,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                children: _suggestions
+                    .map((n) => ActionChip(
+                          label: Text(n),
+                          backgroundColor: AppTheme.surface2,
+                          labelStyle:
+                              const TextStyle(color: AppTheme.textPrimary),
+                          onPressed: () => _debtorCtrl.text = n,
+                        ))
+                    .toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+            onPressed: _confirm, child: Text(widget.confirmLabel)),
+      ],
+    );
+  }
+}

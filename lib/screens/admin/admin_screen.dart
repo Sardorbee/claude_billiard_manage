@@ -418,43 +418,220 @@ class _EditTableSheetState extends State<_EditTableSheet> {
 
 // ─── MENU TAB ────────────────────────────────────────────────────────────────
 
-class _MenuTab extends StatelessWidget {
+class _MenuTab extends StatefulWidget {
   const _MenuTab();
 
   @override
+  State<_MenuTab> createState() => _MenuTabState();
+}
+
+class _MenuTabState extends State<_MenuTab> {
+  Stream<Venue>? _venue;
+  String? _venueId;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _venueId = authState.user.venueId;
+      _venue = context.read<VenueRepository>().watchVenue(_venueId!);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocBuilder<MenuBloc, MenuState>(
-      builder: (context, state) {
-        final items = state is MenuLoaded ? state.allItems : <MenuItem>[];
-        return Scaffold(
-          backgroundColor: AppTheme.bg,
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => _showAddItemSheet(context),
-            backgroundColor: AppTheme.green,
-            foregroundColor: AppTheme.bg,
-            child: const Icon(Icons.add),
-          ),
-          body: items.isEmpty
-              ? const Center(
-                  child: Text('No menu items yet',
-                      style: TextStyle(color: AppTheme.textMuted)))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: items.length,
-                  itemBuilder: (ctx, i) => _AdminMenuRow(item: items[i]),
-                ),
+    return StreamBuilder<Venue>(
+      stream: _venue,
+      builder: (context, venueSnap) {
+        final categories =
+            venueSnap.data?.menuCategories ?? Venue.defaultMenuCategories;
+        return BlocBuilder<MenuBloc, MenuState>(
+          builder: (context, state) {
+            final items = state is MenuLoaded ? state.allItems : <MenuItem>[];
+            return Scaffold(
+              backgroundColor: AppTheme.bg,
+              floatingActionButton: FloatingActionButton(
+                onPressed: () => _showAddItemSheet(context, categories),
+                backgroundColor: AppTheme.green,
+                foregroundColor: AppTheme.bg,
+                child: const Icon(Icons.add),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  _CategoriesBar(
+                    categories: categories,
+                    onEdit: () => _showCategoriesDialog(
+                        context, categories, items),
+                  ),
+                  const SizedBox(height: 12),
+                  if (items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 48),
+                      child: Center(
+                          child: Text('No menu items yet',
+                              style: TextStyle(color: AppTheme.textMuted))),
+                    ),
+                  ...items.map((item) => _AdminMenuRow(item: item)),
+                ],
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  void _showAddItemSheet(BuildContext context) {
+  void _showAddItemSheet(BuildContext context, List<String> categories) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
       isScrollControlled: true,
       builder: (_) => BlocProvider.value(
-          value: context.read<MenuBloc>(), child: const _AddMenuItemSheet()),
+          value: context.read<MenuBloc>(),
+          child: _AddMenuItemSheet(categories: categories)),
+    );
+  }
+
+  void _showCategoriesDialog(
+      BuildContext context, List<String> categories, List<MenuItem> items) {
+    final venueId = _venueId;
+    if (venueId == null) return;
+    showDialog(
+      context: context,
+      builder: (_) => _CategoriesDialog(
+        initial: categories,
+        inUse: items.map((i) => i.category).toSet(),
+        onSave: (list) => context
+            .read<VenueRepository>()
+            .setMenuCategories(venueId, list),
+      ),
+    );
+  }
+}
+
+class _CategoriesBar extends StatelessWidget {
+  final List<String> categories;
+  final VoidCallback onEdit;
+  const _CategoriesBar({required this.categories, required this.onEdit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: categories.map((c) => StatusBadge(c)).toList(),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit_outlined, size: 16),
+          label: const Text('Categories'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CategoriesDialog extends StatefulWidget {
+  final List<String> initial;
+  final Set<String> inUse; // categories that menu items still point at
+  final Future<void> Function(List<String>) onSave;
+  const _CategoriesDialog(
+      {required this.initial, required this.inUse, required this.onSave});
+
+  @override
+  State<_CategoriesDialog> createState() => _CategoriesDialogState();
+}
+
+class _CategoriesDialogState extends State<_CategoriesDialog> {
+  late final List<String> _list = [...widget.initial];
+  final _ctrl = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _add() {
+    final name = _ctrl.text.trim();
+    if (name.isEmpty) return;
+    if (_list.any((c) => c.toLowerCase() == name.toLowerCase())) {
+      setState(() => _error = 'Already in the list');
+      return;
+    }
+    setState(() {
+      _list.add(name);
+      _ctrl.clear();
+      _error = null;
+    });
+  }
+
+  Future<void> _save() async {
+    final navigator = Navigator.of(context);
+    try {
+      await widget.onSave(_list);
+      navigator.pop();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Menu Categories'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ..._list.map((c) {
+              final used = widget.inUse.contains(c);
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                title: Text(c),
+                subtitle: used
+                    ? const Text('Used by menu items',
+                        style:
+                            TextStyle(color: AppTheme.textMuted, fontSize: 11))
+                    : null,
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  // Removing a category that items still use would orphan
+                  // them in reports.
+                  onPressed: used || _list.length == 1
+                      ? null
+                      : () => setState(() => _list.remove(c)),
+                ),
+              );
+            }),
+            TextField(
+              controller: _ctrl,
+              style: const TextStyle(color: AppTheme.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'New category',
+                errorText: _error,
+                suffixIcon:
+                    IconButton(icon: const Icon(Icons.add), onPressed: _add),
+              ),
+              onSubmitted: (_) => _add(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(onPressed: _save, child: const Text('SAVE')),
+      ],
     );
   }
 }
@@ -544,7 +721,8 @@ class _AdminMenuRow extends StatelessWidget {
 }
 
 class _AddMenuItemSheet extends StatefulWidget {
-  const _AddMenuItemSheet();
+  final List<String> categories;
+  const _AddMenuItemSheet({required this.categories});
   @override
   State<_AddMenuItemSheet> createState() => _AddMenuItemSheetState();
 }
@@ -552,13 +730,7 @@ class _AddMenuItemSheet extends StatefulWidget {
 class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
   final _nameCtrl = TextEditingController();
   final _priceCtrl = TextEditingController();
-  String _category = 'Ichimliklar';
-
-  static const _categories = [
-    'Non-dog',
-    'Ichimliklar',
-    'Sigaret',
-  ];
+  late String _category = widget.categories.first;
 
   @override
   Widget build(BuildContext context) {
@@ -588,7 +760,7 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
             value: _category,
             dropdownColor: AppTheme.surface2,
             decoration: const InputDecoration(labelText: 'Category'),
-            items: _categories
+            items: widget.categories
                 .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                 .toList(),
             onChanged: (c) => setState(() => _category = c!),

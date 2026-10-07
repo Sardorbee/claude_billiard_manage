@@ -121,11 +121,17 @@ class TableRepository {
 // ─── SESSION REPOSITORY ───────────────────────────────────────────────────────
 
 class SessionRepository {
+  static const counterSaleName = 'Counter';
+
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseDatabase _rtdb = FirebaseDatabase.instanceFor(
+  final DebtRepository _debts;
+
+  SessionRepository(this._debts);
+  static final FirebaseDatabase liveDatabase = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL: 'https://billiard-manage-default-rtdb.asia-southeast1.firebasedatabase.app',
   );
+  final FirebaseDatabase _rtdb = liveDatabase;
 
 
 
@@ -287,19 +293,36 @@ class SessionRepository {
     required String sessionId,
     required String tableId,
     required SessionModel session,
-    required double finalTotal,
+    required AppUser closedBy,
   }) async {
-    final now = DateTime.now();
+    final now = session.endedAt ?? DateTime.now();
+    final debtor = await _debtorRef(venueId, session);
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
     final tableRef   = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
 
     await _db.runTransaction((tx) async {
       await _ensureActive(tx, sessionRef);
+      // The debt lands in the customer's ledger in the same write as the
+      // checkout, so one can't exist without the other.
+      if (debtor != null) {
+        await _debts.applyEntry(tx,
+            venueId: venueId,
+            customerRef: debtor,
+            customerName: session.debtorName!,
+            type: DebtEntryType.debt,
+            amount: session.finalTotal ?? session.total,
+            note: session.tableName,
+            sessionId: sessionId,
+            by: closedBy);
+      }
       tx.update(sessionRef, {
         'status':             'completed',
         'endedAt':            Timestamp.fromDate(now),
-        'finalTotal':         finalTotal,
+        'finalTotal':         session.finalTotal,
         'totalPausedSeconds': session.totalPausedSeconds,  // ← save paused seconds
+        'paymentMethod':      session.paymentMethod?.name,
+        'debtorName':         session.debtorName,
+        'closedBy':           closedBy.uid,
       });
       tx.update(tableRef, {
         'status':           'open',
@@ -334,6 +357,60 @@ class SessionRepository {
     if (status != 'active') {
       throw Exception('This session is already ${status ?? 'closed'}');
     }
+  }
+
+  // A sale with no table: stored as an already-completed session so reports
+  // pick it up alongside table sessions.
+  Future<SessionModel> createCounterSale({
+    required String venueId,
+    required List<OrderItem> items,
+    required PaymentMethod paymentMethod,
+    String? debtorName,
+    required AppUser soldBy,
+  }) async {
+    final ref = _db.collection('venues').doc(venueId).collection('sessions').doc();
+    final now = DateTime.now();
+    final total = items.fold(0.0, (sum, i) => sum + i.subtotal);
+    final sale = SessionModel(
+      id: ref.id,
+      tableId: '',
+      tableName: counterSaleName,
+      startedAt: now,
+      endedAt: now,
+      guestCount: 0,
+      hourlyRate: 0,
+      orderItems: items,
+      status: 'completed',
+      openedBy: soldBy.uid,
+      venueId: venueId,
+      finalTotal: total,
+      paymentMethod: paymentMethod,
+      debtorName: debtorName,
+    );
+    final debtor = await _debtorRef(venueId, sale);
+    await _db.runTransaction((tx) async {
+      if (debtor != null) {
+        await _debts.applyEntry(tx,
+            venueId: venueId,
+            customerRef: debtor,
+            customerName: debtorName!,
+            type: DebtEntryType.debt,
+            amount: total,
+            note: counterSaleName,
+            sessionId: ref.id,
+            by: soldBy);
+      }
+      tx.set(ref, {...sale.toFirestore(), 'closedBy': soldBy.uid});
+    });
+    return sale;
+  }
+
+  // The ledger account to charge when a sale is paid as debt, else null.
+  Future<DocumentReference<Map<String, dynamic>>?> _debtorRef(
+      String venueId, SessionModel session) async {
+    final name = session.debtorName;
+    if (session.paymentMethod != PaymentMethod.debt || name == null) return null;
+    return _debts.customerRefFor(venueId, name);
   }
 
   // History queries
@@ -486,10 +563,185 @@ class BookingRepository {
   }
 }
 
+// ─── DEBT REPOSITORY ──────────────────────────────────────────────────────────
+
+class DebtRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  CollectionReference<Map<String, dynamic>> _customers(String venueId) =>
+      _db.collection('venues').doc(venueId).collection('customers');
+
+  CollectionReference<Map<String, dynamic>> _entries(String venueId) =>
+      _db.collection('venues').doc(venueId).collection('debtEntries');
+
+  // Largest debt first, then by name.
+  Stream<List<Customer>> watchCustomers(String venueId) {
+    return _customers(venueId).snapshots().map((snap) {
+      final list = snap.docs.map(Customer.fromFirestore).toList();
+      list.sort((a, b) {
+        final byBalance = b.balance.compareTo(a.balance);
+        return byBalance != 0
+            ? byBalance
+            : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      return list;
+    });
+  }
+
+  Stream<Customer?> watchCustomer(String venueId, String customerId) =>
+      _customers(venueId).doc(customerId).snapshots()
+          .map((doc) => doc.exists ? Customer.fromFirestore(doc) : null);
+
+  // Sorted here rather than in the query, so no composite index is needed.
+  Stream<List<DebtEntry>> watchEntries(String venueId, String customerId) {
+    return _entries(venueId)
+        .where('customerId', isEqualTo: customerId)
+        .snapshots()
+        .map((snap) => snap.docs.map(DebtEntry.fromFirestore).toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  }
+
+  Future<List<String>> customerNames(String venueId) async {
+    final snap = await _customers(venueId).get();
+    return snap.docs.map((d) => (d.data()['name'] ?? '') as String).toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
+
+  // The customer with this name, or a fresh reference if there is none yet.
+  // Names match case-insensitively so "ali" and "Ali" are one person.
+  Future<DocumentReference<Map<String, dynamic>>> customerRefFor(
+      String venueId, String name) async {
+    final snap = await _customers(venueId)
+        .where('nameLower', isEqualTo: name.trim().toLowerCase())
+        .limit(1)
+        .get();
+    return snap.docs.isNotEmpty
+        ? snap.docs.first.reference
+        : _customers(venueId).doc();
+  }
+
+  // Writes one ledger entry and moves the customer's balance with it.
+  // Reads the customer first, so call it before any other write in [tx].
+  Future<void> applyEntry(
+    Transaction tx, {
+    required String venueId,
+    required DocumentReference<Map<String, dynamic>> customerRef,
+    required String customerName,
+    String? phone,
+    required DebtEntryType type,
+    required double amount,
+    String? note,
+    String? sessionId,
+    PaymentMethod? paymentMethod,
+    required AppUser by,
+  }) async {
+    final now = DateTime.now();
+    final entry = DebtEntry(
+      id: '',
+      customerId: customerRef.id,
+      customerName: customerName.trim(),
+      type: type,
+      amount: amount,
+      note: note,
+      sessionId: sessionId,
+      paymentMethod: paymentMethod,
+      createdBy: by.uid,
+      createdByName: by.name,
+      createdAt: now,
+    );
+
+    final customer = await tx.get(customerRef);
+    if (customer.exists) {
+      tx.update(customerRef, {
+        'balance': FieldValue.increment(entry.delta),
+        'updatedAt': Timestamp.fromDate(now),
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+      });
+    } else {
+      tx.set(customerRef, {
+        'name': customerName.trim(),
+        'nameLower': customerName.trim().toLowerCase(),
+        'phone': phone,
+        'balance': entry.delta,
+        'createdAt': Timestamp.fromDate(now),
+        'updatedAt': Timestamp.fromDate(now),
+      });
+    }
+    tx.set(_entries(venueId).doc(), entry.toFirestore());
+  }
+
+  // A debt entered by hand, for a new or an existing customer.
+  Future<void> addDebt({
+    required String venueId,
+    required String name,
+    String? phone,
+    required double amount,
+    String? note,
+    required AppUser by,
+  }) async {
+    final customerRef = await customerRefFor(venueId, name);
+    await _db.runTransaction((tx) => applyEntry(tx,
+        venueId: venueId,
+        customerRef: customerRef,
+        customerName: name,
+        phone: phone,
+        type: DebtEntryType.debt,
+        amount: amount,
+        note: note,
+        by: by));
+  }
+
+  // Money received (payment) or a balance forgiven (writeoff).
+  Future<void> reduceDebt({
+    required String venueId,
+    required Customer customer,
+    required DebtEntryType type,
+    required double amount,
+    PaymentMethod? paymentMethod,
+    String? note,
+    required AppUser by,
+  }) async {
+    final customerRef = _customers(venueId).doc(customer.id);
+    await _db.runTransaction((tx) async {
+      final balance = ((await tx.get(customerRef)).data()?['balance'] ?? 0).toDouble();
+      if (amount > balance) {
+        throw Exception('${customer.name} only owes ${balance.toStringAsFixed(2)}');
+      }
+      await applyEntry(tx,
+          venueId: venueId,
+          customerRef: customerRef,
+          customerName: customer.name,
+          type: type,
+          amount: amount,
+          paymentMethod: paymentMethod,
+          note: note,
+          by: by);
+    });
+  }
+
+  Future<void> updateCustomer(String venueId, String customerId,
+          {required String name, String? phone}) =>
+      _customers(venueId).doc(customerId).update({
+        'name': name.trim(),
+        'nameLower': name.trim().toLowerCase(),
+        'phone': phone,
+      });
+}
+
 // ─── VENUE REPOSITORY ─────────────────────────────────────────────────────────
 
 class VenueRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  // Emits defaults when the venue has no document of its own yet.
+  Stream<Venue> watchVenue(String venueId) =>
+      _db.collection('venues').doc(venueId).snapshots().map(Venue.fromFirestore);
+
+  // set+merge rather than update, so it also works before the venue
+  // document exists.
+  Future<void> setMenuCategories(String venueId, List<String> categories) =>
+      _db.collection('venues').doc(venueId)
+          .set({'menuCategories': categories}, SetOptions(merge: true));
 
   Future<Venue?> getVenue(String venueId) async {
     final doc = await _db.collection('venues').doc(venueId).get();

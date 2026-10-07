@@ -142,6 +142,13 @@ class _FloorTablesUpdated extends FloorEvent {
   List<Object?> get props => [tables];
 }
 
+class _FloorFailed extends FloorEvent {
+  final String message;
+  const _FloorFailed(this.message);
+  @override
+  List<Object?> get props => [message];
+}
+
 abstract class FloorState extends Equatable {
   const FloorState();
   @override
@@ -190,6 +197,7 @@ class FloorBloc extends Bloc<FloorEvent, FloorState> {
     on<FloorLoadRequested>(_onLoad);
     on<FloorFilterChanged>(_onFilter);
     on<_FloorTablesUpdated>(_onTablesUpdated);
+    on<_FloorFailed>((event, emit) => emit(FloorError(event.message)));
   }
 
   Future<void> _onLoad(
@@ -198,7 +206,10 @@ class FloorBloc extends Bloc<FloorEvent, FloorState> {
     await _tablesSub?.cancel();
     _tablesSub = _tableRepo.watchTables(event.venueId).listen(
           (tables) => add(_FloorTablesUpdated(tables)),
-          onError: (e) => emit(FloorError(e.toString())),
+          // The stream outlives this handler, so errors come back in as an
+          // event; emitting from here would throw. Signing out ends the
+          // stream with permission-denied, which lands here too.
+          onError: (e) => add(_FloorFailed(e.toString())),
         );
   }
 
@@ -293,7 +304,19 @@ class SessionDiscountApplied extends SessionEvent {
   List<Object?> get props => [discountPct];
 }
 
-class SessionCheckoutRequested extends SessionEvent {}
+class SessionCheckoutRequested extends SessionEvent {
+  final PaymentMethod paymentMethod;
+  final String? debtorName;
+  final AppUser closedBy;
+  // The bill as it was shown in the checkout dialog. The clock keeps running
+  // while the payment type is chosen, so the session is closed at this
+  // amount rather than at whatever it has grown to by then.
+  final SessionActive quote;
+  const SessionCheckoutRequested(this.paymentMethod,
+      {this.debtorName, required this.closedBy, required this.quote});
+  @override
+  List<Object?> get props => [paymentMethod, debtorName, closedBy.uid, quote];
+}
 
 class SessionVoidRequested extends SessionEvent {}
 
@@ -349,12 +372,10 @@ class SessionActive extends SessionState {
 
   double get currentLegCharge => (currentLegSeconds / 3600) * session.hourlyRate;
 
-// Total = all splits + current leg + F&B + paused - discount
-  double get total {
-    final splitTotal = session.splits.fold(0.0, (sum, s) => sum + s.total);
-    return (splitTotal + currentLegCharge + fbTotal + pausedTimeCharge - discountAmount)
-        .clamp(0, double.infinity);
-  }
+// Total = whole-session time (active + paused) + F&B - discount. Splits only
+// divide the time between payers, so they are not added on top.
+  double get total =>
+      (subtotal - discountAmount).clamp(0, double.infinity).toDouble();
 
   int get activeSeconds => elapsedSeconds - pausedSeconds;
 
@@ -370,8 +391,10 @@ class SessionActive extends SessionState {
 
   double get fbTotal => session.fbTotal;
   double get subtotal => currentTimeCharge + fbTotal;
-  double get discountAmount =>
-      session.discount > 0 ? subtotal * (session.discount / 100) : 0;
+  // The discount comes off table time only, never food and drink.
+  double get discountAmount => session.discount > 0
+      ? currentTimeCharge * (session.discount / 100)
+      : 0;
 
   @override
   List<Object?> get props =>
@@ -627,11 +650,15 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   Future<void> _onCheckout(
       SessionCheckoutRequested event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null || _tableId == null) return;
-    final s = state as SessionActive;
+    final s = event.quote;
 
     // Save paused seconds into the session model before checkout
     final sessionToSave = s.session.copyWith(
+      endedAt: s.session.startedAt.add(Duration(seconds: s.elapsedSeconds)),
       totalPausedSeconds: s.pausedSeconds,
+      finalTotal: s.total,
+      paymentMethod: event.paymentMethod,
+      debtorName: event.debtorName,
     );
 
     try {
@@ -640,7 +667,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         sessionId: _sessionId!,
         tableId: _tableId!,
         session: sessionToSave,
-        finalTotal: s.total,
+        closedBy: event.closedBy,
       );
       _ticker?.cancel();
       emit(SessionCompleted(completed));
@@ -824,7 +851,9 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
     await _menuSub?.cancel();
     _menuSub = _menuRepo
         .watchMenu(event.venueId)
-        .listen((items) => add(_MenuItemsUpdated(items)));
+        // Signing out ends the stream with permission-denied; the next
+        // sign-in starts a fresh one.
+        .listen((items) => add(_MenuItemsUpdated(items)), onError: (_) {});
   }
 
   void _onCategoryFilter(
@@ -987,7 +1016,8 @@ class BookingsBloc extends Bloc<BookingsEvent, BookingsState> {
     await _bookingsSub?.cancel();
     _bookingsSub = _bookingRepo
         .watchBookings(event.venueId)
-        .listen((bookings) => add(_BookingsUpdated(bookings)));
+        .listen((bookings) => add(_BookingsUpdated(bookings)),
+            onError: (_) {});
   }
 
   void _onDateSelected(
@@ -1143,28 +1173,33 @@ class StatsBloc extends Bloc<StatsEvent, StatsState> {
 
       double totalRevenue = 0, timeRevenue = 0, fbRevenue = 0;
       double totalMinutes = 0;
+      int tableSessions = 0;
       final revenueByDay = <String, double>{};
       final revenueByTable = <String, double>{};
       final topItems = <String, int>{};
       final byHour = <int, int>{};
 
       for (final s in sessions) {
-        totalRevenue += s.total;
-        timeRevenue += s.timeCharge;
+        totalRevenue += s.paidTotal;
+        timeRevenue += s.netTimeCharge;
         fbRevenue += s.fbTotal;
-        totalMinutes += s.elapsedSeconds / 60;
-
         final dayKey = '${s.startedAt.month}/${s.startedAt.day}';
-        revenueByDay[dayKey] = (revenueByDay[dayKey] ?? 0) + s.total;
+        revenueByDay[dayKey] = (revenueByDay[dayKey] ?? 0) + s.paidTotal;
         revenueByTable[s.tableName] =
-            (revenueByTable[s.tableName] ?? 0) + s.total;
-
-        final hour = s.startedAt.hour;
-        byHour[hour] = (byHour[hour] ?? 0) + 1;
+            (revenueByTable[s.tableName] ?? 0) + s.paidTotal;
 
         for (final item in s.orderItems) {
           topItems[item.name] = (topItems[item.name] ?? 0) + item.quantity;
         }
+
+        // Counter sales bring revenue but are not table sessions, so they
+        // stay out of the session count, durations and busy hours.
+        if (s.isCounterSale) continue;
+        tableSessions++;
+        totalMinutes += s.elapsedSeconds / 60;
+
+        final hour = s.startedAt.hour;
+        byHour[hour] = (byHour[hour] ?? 0) + 1;
       }
 
       emit(StatsLoaded(
@@ -1172,11 +1207,11 @@ class StatsBloc extends Bloc<StatsEvent, StatsState> {
             totalRevenue: totalRevenue,
             timeRevenue: timeRevenue,
             fbRevenue: fbRevenue,
-            totalSessions: sessions.length,
+            totalSessions: tableSessions,
             avgSessionMinutes:
-                sessions.isNotEmpty ? totalMinutes / sessions.length : 0,
+                tableSessions > 0 ? totalMinutes / tableSessions : 0,
             avgSessionValue:
-                sessions.isNotEmpty ? totalRevenue / sessions.length : 0,
+                tableSessions > 0 ? totalRevenue / tableSessions : 0,
             sessions: sessions,
             revenueByDay: revenueByDay,
             revenueByTable: revenueByTable,

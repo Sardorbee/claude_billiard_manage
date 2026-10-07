@@ -14,6 +14,14 @@ class _StatsScreenState extends State<StatsScreen> {
   String _range = 'today';
 
   @override
+  void initState() {
+    super.initState();
+    // Stats are a one-off query, so fetch again each time the tab opens;
+    // otherwise it keeps showing what was true at login.
+    _reload(context, _range);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bg,
@@ -416,7 +424,7 @@ class _SessionHistoryRow extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('\$${session.total.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
+              Text('\$${session.paidTotal.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
               Text(formatTime(session.elapsedSeconds.toInt()), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
             ],
           ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'firebase_options.dart';
@@ -8,11 +10,21 @@ import 'repositories/repositories.dart';
 import 'theme/app_theme.dart';
 import 'utils/router.dart';
 
+const useEmulators = bool.fromEnvironment('USE_EMULATORS');
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  }
+
+  // `--dart-define=USE_EMULATORS=true` points the app at the local Firebase
+  // emulators (see firebase.json) instead of the live project.
+  if (useEmulators) {
+    await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    FirebaseFirestore.instance.useFirestoreEmulator('localhost', 8080);
+    SessionRepository.liveDatabase.useDatabaseEmulator('localhost', 9000);
   }
 
   // Lock to portrait
@@ -35,7 +47,8 @@ class TheFloorApp extends StatelessWidget {
     // Repositories (singletons)
     final authRepo = AuthRepository();
     final tableRepo = TableRepository();
-    final sessionRepo = SessionRepository();
+    final debtRepo = DebtRepository();
+    final sessionRepo = SessionRepository(debtRepo);
     final menuRepo = MenuRepository();
     final bookingRepo = BookingRepository();
     final venueRepo = VenueRepository();
@@ -45,6 +58,7 @@ class TheFloorApp extends StatelessWidget {
         RepositoryProvider.value(value: authRepo),
         RepositoryProvider.value(value: tableRepo),
         RepositoryProvider.value(value: sessionRepo),
+        RepositoryProvider.value(value: debtRepo),
         RepositoryProvider.value(value: menuRepo),
         RepositoryProvider.value(value: bookingRepo),
         RepositoryProvider.value(value: venueRepo),

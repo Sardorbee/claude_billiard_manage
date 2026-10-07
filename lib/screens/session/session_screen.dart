@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../blocs/blocs.dart';
 import '../../models/models.dart';
+import '../../repositories/repositories.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
 
@@ -549,9 +550,11 @@ class _ActiveSessionView extends StatelessWidget {
         initialChildSize: 0.85,
         maxChildSize: 0.95,
         minChildSize: 0.5,
-        builder: (__, ctrl) => BlocProvider.value(
-          value: context.read<SessionBloc>(),
-          child: _AddItemsSheet(controller: ctrl),
+        builder: (__, ctrl) => AddItemsSheet(
+          controller: ctrl,
+          onConfirm: (items) => context
+              .read<SessionBloc>()
+              .add(SessionAddItemsRequested(items)),
         ),
       ),
     );
@@ -723,15 +726,20 @@ class _BottomBillingBar extends StatelessWidget {
     );
   }
 
-  void _showCheckoutConfirm(BuildContext context) {
-    showDialog(
+  Future<void> _showCheckoutConfirm(BuildContext context) async {
+    final bloc = context.read<SessionBloc>();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated) return;
+    final user = authState.user;
+    final debtorNames =
+        context.read<DebtRepository>().customerNames(user.venueId);
+    final choice = await showDialog<PaymentChoice>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Confirm Checkout'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      builder: (_) => PaymentDialog(
+        title: 'Confirm Checkout',
+        confirmLabel: 'CONFIRM CHECKOUT',
+        debtorNames: debtorNames,
+        summary: [
             _DialogRow('Table', state.session.tableName),
             _DialogRow('Umumiy vaqt', formatTime(state.elapsedSeconds)),
             _DialogRow("O'ynalgan vaqt", formatTime(state.activeSeconds)),
@@ -761,21 +769,12 @@ class _BottomBillingBar extends StatelessWidget {
             ),
             _DialogRow('Umumiy summa', '\$${state.total.toStringAsFixed(2)}',
                 bold: true),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(_), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              context.read<SessionBloc>().add(SessionCheckoutRequested());
-              Navigator.pop(_);
-            },
-            child: const Text('CONFIRM CHECKOUT'),
-          ),
         ],
       ),
     );
+    if (choice == null) return;
+    bloc.add(SessionCheckoutRequested(choice.method,
+        debtorName: choice.debtorName, closedBy: user, quote: state));
   }
 }
 
@@ -834,14 +833,25 @@ class _DialogRow extends StatelessWidget {
       );
 }
 
-class _AddItemsSheet extends StatefulWidget {
+/// Menu picker. Hands the chosen items to [onConfirm] and closes; used for
+/// both table orders and counter sales.
+class AddItemsSheet extends StatefulWidget {
   final ScrollController controller;
-  const _AddItemsSheet({required this.controller});
+  final String title;
+  final String subtitle;
+  final ValueChanged<List<OrderItem>> onConfirm;
+  const AddItemsSheet({
+    super.key,
+    required this.controller,
+    required this.onConfirm,
+    this.title = 'ADD TO TABLE',
+    this.subtitle = 'Select items for current session',
+  });
   @override
-  State<_AddItemsSheet> createState() => _AddItemsSheetState();
+  State<AddItemsSheet> createState() => _AddItemsSheetState();
 }
 
-class _AddItemsSheetState extends State<_AddItemsSheet> {
+class _AddItemsSheetState extends State<AddItemsSheet> {
   final Map<String, int> _cart = {};
   String? _category;
   String _search = '';
@@ -880,12 +890,12 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('ADD TO TABLE',
-                      style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  const Text('Select items for current session',
-                      style:
-                          TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  Text(widget.title,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  Text(widget.subtitle,
+                      style: const TextStyle(
+                          color: AppTheme.textMuted, fontSize: 12)),
                   const SizedBox(height: 12),
                   // Search
                   TextField(
@@ -1011,9 +1021,8 @@ class _AddItemsSheetState extends State<_AddItemsSheet> {
         category: item.category,
       );
     }).toList();
-    // SessionBloc here is the LOCAL one created by the router for this route
-    context.read<SessionBloc>().add(SessionAddItemsRequested(orderItems));
     Navigator.pop(context);
+    widget.onConfirm(orderItems);
   }
 }
 
@@ -1423,9 +1432,15 @@ class _ReceiptSheet extends StatelessWidget {
             '\$${session.activeTimeCharge.toStringAsFixed(2)}',
             bold: true,
           ),
-          if (session.totalPausedSeconds > 0)
-            _DialogRow('Umumiy summa', '\$${session.total.toStringAsFixed(2)}',
-                bold: true),
+          _DialogRow(
+              'Umumiy summa', '\$${session.paidTotal.toStringAsFixed(2)}',
+              bold: true),
+          if (session.paymentMethod != null)
+            _DialogRow(
+                "To'lov turi",
+                session.paymentMethod == PaymentMethod.debt
+                    ? '${paymentLabel(session.paymentMethod!)} · ${session.debtorName ?? ''}'
+                    : paymentLabel(session.paymentMethod!)),
           const SizedBox(height: 24),
           Row(
             children: [

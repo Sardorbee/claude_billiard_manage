@@ -7,6 +7,7 @@ import '../repositories/repositories.dart';
 import '../screens/login_screen.dart';
 import '../screens/floor/floor_screen.dart';
 import '../screens/session/session_screen.dart';
+import '../screens/debts/debts_screen.dart';
 import '../screens/stats/stats_screen.dart';
 import '../screens/admin/admin_screen.dart';
 
@@ -56,10 +57,12 @@ class AppRouter {
             final loc = state.matchedLocation;
             if (loc.startsWith('/bookings')) {
               currentIndex = 4;
-            } else if (loc.startsWith('/stats')) {
+            } else if (loc.startsWith('/debts')) {
               currentIndex = 1;
-            } else if (loc.startsWith('/admin')) {
+            } else if (loc.startsWith('/stats')) {
               currentIndex = 2;
+            } else if (loc.startsWith('/admin')) {
+              currentIndex = 3;
             }
 
             return Scaffold(
@@ -74,9 +77,12 @@ class AppRouter {
                       break;
                     // case 1: context.go('/bookings'); break;
                     case 1:
-                      context.go('/stats');
+                      context.go('/debts');
                       break;
                     case 2:
+                      context.go('/stats');
+                      break;
+                    case 3:
                       context.go('/admin');
                       break;
                   }
@@ -87,6 +93,7 @@ class AppRouter {
           routes: [
             GoRoute(path: '/floor', builder: (_, __) => const FloorScreen()),
             // GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
+            GoRoute(path: '/debts', builder: (_, __) => const DebtsScreen()),
             GoRoute(path: '/stats', builder: (_, __) => const StatsScreen()),
             GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
           ],
@@ -183,6 +190,8 @@ class _BottomNav extends StatelessWidget {
           const BottomNavigationBarItem(
               icon: Icon(Icons.grid_view_rounded), label: 'Floor'),
           // const BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Bookings'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_outlined), label: 'Qarzlar'),
           const BottomNavigationBarItem(
               icon: Icon(Icons.bar_chart_rounded), label: 'Stats'),
           if (isAdmin)
