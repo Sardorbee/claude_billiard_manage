@@ -7,6 +7,8 @@ import '../models/models.dart';
 
 const _uuid = Uuid();
 
+Timestamp? _stamp(DateTime? at) => at == null ? null : Timestamp.fromDate(at);
+
 String _money(double amount) =>
     amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2);
 
@@ -241,9 +243,13 @@ class SessionRepository {
     required TableModel table,
     required int guestCount,
     required String openedBy,
+    int? plannedMinutes, // null = open-ended
   }) async {
     final sessionId = _uuid.v4();
     final now = DateTime.now();
+    final plannedEndAt = plannedMinutes == null
+        ? null
+        : now.add(Duration(minutes: plannedMinutes));
 
     final session = SessionModel(
       id: sessionId,
@@ -254,7 +260,7 @@ class SessionRepository {
       hourlyRate: table.hourlyRate,
       openedBy: openedBy,
       venueId: venueId,
-
+      plannedEndAt: plannedEndAt,
     );
 
     final sessionRef = _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId);
@@ -269,7 +275,11 @@ class SessionRepository {
         throw Exception('${table.name} stolida faol seans bor');
       }
       tx.set(sessionRef, session.toFirestore());
-      tx.update(tableRef, {'status': 'active', 'currentSessionId': sessionId});
+      tx.update(tableRef, {
+        'status': 'active',
+        'currentSessionId': sessionId,
+        'sessionEndsAt': _stamp(plannedEndAt),
+      });
     });
 
     // RTDB: live state
@@ -342,12 +352,19 @@ class SessionRepository {
       if (to != null && to['status'] == 'active' && to['currentSessionId'] != null) {
         throw Exception('$toTableName stolida faol seans bor');
       }
-      final fromName = (await tx.get(sessionRef)).data()?['tableName'] ?? '';
+      final session = (await tx.get(sessionRef)).data();
+      final fromName = session?['tableName'] ?? '';
       tx.update(sessionRef, {'tableId': toTableId, 'tableName': toTableName});
       _activity.logIn(tx, venueId, ActivityType.sessionTransferred, fromName,
           detail: '→ $toTableName');
-      tx.update(fromRef, {'status': 'open', 'currentSessionId': null});
-      tx.update(toRef, {'status': 'active', 'currentSessionId': sessionId});
+      tx.update(fromRef,
+          {'status': 'open', 'currentSessionId': null, 'sessionEndsAt': null});
+      // The booked end time travels with the session.
+      tx.update(toRef, {
+        'status': 'active',
+        'currentSessionId': sessionId,
+        'sessionEndsAt': session?['plannedEndAt'],
+      });
     });
 
     // Move RTDB live state
@@ -356,6 +373,20 @@ class SessionRepository {
       await _liveRef(venueId, toTableId).set(snapshot.value);
       await _liveRef(venueId, fromTableId).remove();
     }
+  }
+
+  // Sets, extends or (with null) removes a running session's booked end
+  // time, on the session and on its table together.
+  Future<void> setPlannedEnd(String venueId, String sessionId, String tableId,
+      DateTime? plannedEndAt) {
+    final batch = _db.batch();
+    batch.update(
+        _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId),
+        {'plannedEndAt': _stamp(plannedEndAt)});
+    batch.update(
+        _db.collection('venues').doc(venueId).collection('tables').doc(tableId),
+        {'sessionEndsAt': _stamp(plannedEndAt)});
+    return batch.commit();
   }
 
   Future<SessionModel> getSession(String venueId, String sessionId) async {
@@ -414,6 +445,7 @@ class SessionRepository {
       tx.update(tableRef, {
         'status':           'open',
         'currentSessionId': null,
+        'sessionEndsAt':    null,
       });
     });
 
@@ -435,7 +467,8 @@ class SessionRepository {
       final tableName = (await tx.get(sessionRef)).data()?['tableName'] ?? '';
       _activity.logIn(tx, venueId, ActivityType.sessionVoided, tableName);
       tx.update(sessionRef, {'status': 'voided', 'endedAt': Timestamp.fromDate(DateTime.now())});
-      tx.update(tableRef, {'status': 'open', 'currentSessionId': null});
+      tx.update(tableRef,
+          {'status': 'open', 'currentSessionId': null, 'sessionEndsAt': null});
     });
     await _liveRef(venueId, tableId).remove();
   }

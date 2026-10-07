@@ -248,13 +248,23 @@ class SessionOpenRequested extends SessionEvent {
   final TableModel table;
   final int guestCount;
   final String openedBy;
+  final int? plannedMinutes; // null = open-ended
   const SessionOpenRequested(
       {required this.venueId,
       required this.table,
       required this.guestCount,
-      required this.openedBy});
+      required this.openedBy,
+      this.plannedMinutes});
   @override
-  List<Object?> get props => [venueId, table.id, guestCount];
+  List<Object?> get props => [venueId, table.id, guestCount, plannedMinutes];
+}
+
+// Set, extend or (with null) remove the session's booked end time.
+class SessionPlannedEndChanged extends SessionEvent {
+  final DateTime? plannedEndAt;
+  const SessionPlannedEndChanged(this.plannedEndAt);
+  @override
+  List<Object?> get props => [plannedEndAt];
 }
 
 class SessionLoadRequested extends SessionEvent {
@@ -271,8 +281,11 @@ class SessionResumeRequested extends SessionEvent {}
 
 class SessionSplitRequested extends SessionEvent {
   final String payerName;
-  const SessionSplitRequested(this.payerName);
-  @override List<Object?> get props => [payerName];
+  // The leg as it was shown in the split sheet; the clock keeps running
+  // while the name is typed, so the split is recorded at this amount.
+  final SessionActive quote;
+  const SessionSplitRequested(this.payerName, {required this.quote});
+  @override List<Object?> get props => [payerName, quote];
 }
 
 class SessionAddItemsRequested extends SessionEvent {
@@ -363,11 +376,12 @@ class SessionActive extends SessionState {
 
 
   // Seconds since the last split point (current leg only)
+  // Whatever the recorded splits haven't covered, so the splits and this
+  // leg always add up to the whole session.
   int get currentLegSeconds {
-    if (session.splits.isEmpty) return activeSeconds;
-    final lastSplit = session.splits.last.splitAt;
-    final diff = DateTime.now().difference(lastSplit).inSeconds;
-    return diff < 0 ? 0 : diff;
+    final left = elapsedSeconds -
+        session.splits.fold<int>(0, (a, s) => a + s.durationSeconds);
+    return left < 0 ? 0 : left;
   }
 
   double get currentLegCharge => (currentLegSeconds / 3600) * session.hourlyRate;
@@ -378,6 +392,11 @@ class SessionActive extends SessionState {
       (subtotal - discountAmount).clamp(0, double.infinity).roundToDouble();
 
   int get activeSeconds => elapsedSeconds - pausedSeconds;
+
+  // Seconds left of a fixed-time session; negative once it has run over.
+  // Null for an open-ended session.
+  int? get remainingSeconds =>
+      session.plannedEndAt?.difference(DateTime.now()).inSeconds;
 
   // Active time charge (non-paused time at full rate)
   double get activeTimeCharge => (activeSeconds / 3600) * session.hourlyRate;
@@ -439,25 +458,37 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
     on<_SessionFsUpdated>(_onFsUpdate);
     on<SessionTick>(_onTick);
     on<SessionSplitRequested>(_onSplit);
+    on<SessionPlannedEndChanged>(_onPlannedEnd);
+  }
+
+  Future<void> _onPlannedEnd(
+      SessionPlannedEndChanged event, Emitter<SessionState> emit) async {
+    if (_venueId == null || _sessionId == null || _tableId == null) return;
+    try {
+      await _sessionRepo.setPlannedEnd(
+          _venueId!, _sessionId!, _tableId!, event.plannedEndAt);
+    } catch (e) {
+      emit(SessionError(_message(e)));
+      return;
+    }
+    _session = _session?.copyWith(
+        plannedEndAt: event.plannedEndAt,
+        clearPlannedEnd: event.plannedEndAt == null);
+    _emitActive(emit);
   }
 
   Future<void> _onSplit(SessionSplitRequested event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null || _session == null) return;
     final s = state as SessionActive;
 
-    // Seconds elapsed since last split (or session start)
-    final lastSplitAt = _session!.splits.isEmpty
-        ? _session!.startedAt
-        : _session!.splits.last.splitAt;
-    final durationSeconds = DateTime.now().difference(lastSplitAt).inSeconds;
-    final timeCharge = (durationSeconds / 3600) * _session!.hourlyRate;
-
+    final quote = event.quote;
     final split = SessionSplit(
       id:              DateTime.now().millisecondsSinceEpoch.toString(),
       payerName:       event.payerName,
-      durationSeconds: durationSeconds,
-      timeCharge:      timeCharge,
-      splitAt:         DateTime.now(),
+      durationSeconds: quote.currentLegSeconds,
+      timeCharge:      quote.currentLegCharge,
+      splitAt:         quote.session.startedAt
+          .add(Duration(seconds: quote.elapsedSeconds)),
     );
 
     // Save split to Firestore
@@ -529,6 +560,7 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
         table: event.table,
         guestCount: event.guestCount,
         openedBy: event.openedBy,
+        plannedMinutes: event.plannedMinutes,
       );
       _session = session;
       _startListeners(event.venueId, event.table.id, session.id);

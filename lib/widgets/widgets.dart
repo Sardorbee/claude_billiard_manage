@@ -100,9 +100,16 @@ class TableCard extends StatelessWidget {
     this.onTap,
   });
 
+  // A fixed-time session that has run past its booked end.
+  bool get _timeIsUp =>
+      table.status == TableStatus.active &&
+      table.sessionEndsAt != null &&
+      !table.sessionEndsAt!.isAfter(DateTime.now());
+
   Color get _borderColor {
     switch (table.status) {
       case TableStatus.active:
+        if (_timeIsUp) return AppTheme.red;
         return AppTheme.green.withOpacity(0.4);
       case TableStatus.reserved:
         return AppTheme.amber.withOpacity(0.4);
@@ -149,7 +156,9 @@ class TableCard extends StatelessWidget {
               _OpenContent()
             else if (table.status == TableStatus.active)
               _ActiveContent(
-                  elapsedSeconds: elapsedSeconds ?? 0, total: runningTotal ?? 0)
+                  elapsedSeconds: elapsedSeconds ?? 0,
+                  total: runningTotal ?? 0,
+                  endsAt: table.sessionEndsAt)
             else if (table.status == TableStatus.reserved)
               _ReservedContent()
             else
@@ -181,7 +190,9 @@ class _OpenContent extends StatelessWidget {
 class _ActiveContent extends StatelessWidget {
   final int elapsedSeconds;
   final double total;
-  const _ActiveContent({required this.elapsedSeconds, required this.total});
+  final DateTime? endsAt; // booked end of a fixed-time session
+  const _ActiveContent(
+      {required this.elapsedSeconds, required this.total, this.endsAt});
 
   String _formatTime(int secs) {
     final h = (secs ~/ 3600).toString().padLeft(2, '0');
@@ -210,7 +221,38 @@ class _ActiveContent extends StatelessWidget {
           formatCurrency(total),
           style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
         ),
+        if (endsAt != null) ...[
+          const SizedBox(height: 4),
+          TimeLeftLabel(
+              remainingSeconds: endsAt!.difference(DateTime.now()).inSeconds),
+        ],
       ],
+    );
+  }
+}
+
+/// "Qoldi 12:34" for a fixed-time session; turns amber in the last five
+/// minutes and red once the time is up.
+class TimeLeftLabel extends StatelessWidget {
+  final int remainingSeconds; // negative once over time
+  final double fontSize;
+  const TimeLeftLabel(
+      {super.key, required this.remainingSeconds, this.fontSize = 11});
+
+  @override
+  Widget build(BuildContext context) {
+    final over = remainingSeconds <= 0;
+    final color = over
+        ? AppTheme.red
+        : remainingSeconds <= 300
+            ? AppTheme.amber
+            : AppTheme.textSecondary;
+    return Text(
+      over
+          ? 'VAQT TUGADI · +${formatTime(-remainingSeconds)}'
+          : 'Qoldi ${formatTime(remainingSeconds)}',
+      style: TextStyle(
+          color: color, fontSize: fontSize, fontWeight: FontWeight.w700),
     );
   }
 }
@@ -668,6 +710,11 @@ String formatCompact(double amount) {
   if (amount.abs() >= 1000) return '${(amount / 1000).round()} ming';
   return '${amount.round()}';
 }
+
+// 30 daq, 1 soat, 1.5 soat
+String durationLabel(int minutes) => minutes < 60
+    ? '$minutes daq'
+    : '${(minutes / 60).toStringAsFixed(minutes % 60 == 0 ? 0 : 1)} soat';
 
 String tableTypeLabel(TableType type) => switch (type) {
       TableType.billiard => 'Bilyard',

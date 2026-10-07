@@ -133,11 +133,13 @@ class AppRouter {
                   // Opening a brand-new session
                   final table = extra['table'] as TableModel;
                   final guestCount = extra['guestCount'] as int? ?? 2;
+                  final plannedMinutes = extra['plannedMinutes'] as int?;
                   bloc.add(SessionOpenRequested(
                     venueId: user?.venueId ?? '',
                     table: table,
                     guestCount: guestCount,
                     openedBy: user?.uid ?? '',
+                    plannedMinutes: plannedMinutes,
                   ));
                 } else {
                   // Re-entering an existing active session

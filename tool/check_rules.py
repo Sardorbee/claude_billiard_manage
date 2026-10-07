@@ -95,6 +95,7 @@ check("worker writes a pre-completed table session",
       write(f"{V}/sessions/w4", session(worker_uid, "completed"), worker, mask=False), False)
 
 check("worker marks a table active", write(f"{V}/tables/table-2", {"status": "active"}, worker), True)
+check("worker sets a table's booked end time", write(f"{V}/tables/table-2", {"sessionEndsAt": None}, worker), True)
 check("worker changes a table's price", write(f"{V}/tables/table-2", {"hourlyRate": 1}, worker), False)
 check("admin changes a table's price", write(f"{V}/tables/table-2", {"hourlyRate": 40000}, admin), True)
 check("worker edits the menu", write(f"{V}/menu/cola", {"price": 1}, worker), False)

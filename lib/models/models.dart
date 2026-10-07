@@ -17,6 +17,10 @@ class TableModel {
   final String? currentSessionId;
   final String? reservationId;
   final bool isActive;
+  // When the running session's booked time is up; null for an open-ended
+  // session. Mirrors the session's plannedEndAt so the floor and the
+  // notifications can see it without loading every session.
+  final DateTime? sessionEndsAt;
 
   const TableModel({
     required this.id,
@@ -29,6 +33,7 @@ class TableModel {
     this.currentSessionId,
     this.reservationId,
     this.isActive = true,
+    this.sessionEndsAt,
   });
 
   factory TableModel.fromFirestore(DocumentSnapshot doc) {
@@ -50,6 +55,7 @@ class TableModel {
       currentSessionId: d['currentSessionId'],
       reservationId: d['reservationId'],
       isActive: d['isActive'] ?? true,
+      sessionEndsAt: (d['sessionEndsAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -63,6 +69,8 @@ class TableModel {
         'currentSessionId': currentSessionId,
         'reservationId': reservationId,
         'isActive': isActive,
+        'sessionEndsAt':
+            sessionEndsAt != null ? Timestamp.fromDate(sessionEndsAt!) : null,
       };
 
   TableModel copyWith({
@@ -88,6 +96,7 @@ class TableModel {
         currentSessionId: currentSessionId ?? this.currentSessionId,
         reservationId: reservationId ?? this.reservationId,
         isActive: isActive ?? this.isActive,
+        sessionEndsAt: sessionEndsAt,
       );
 }
 
@@ -154,6 +163,9 @@ class SessionModel {
   final double? finalTotal; // what was charged at checkout
   final PaymentMethod? paymentMethod; // set at checkout
   final String? debtorName; // who owes, when paymentMethod is debt
+  // For a fixed-time session, when the booked time is up. The session keeps
+  // running (and charging) past it until someone checks it out.
+  final DateTime? plannedEndAt;
 
   // A sale made at the counter with no table and no time charge.
   bool get isCounterSale => tableId.isEmpty;
@@ -180,7 +192,8 @@ class SessionModel {
       this.splits = const [],
       this.finalTotal,
       this.paymentMethod,
-      this.debtorName});
+      this.debtorName,
+      this.plannedEndAt});
 
   // ─── Billing calculation (all local) ───────────────────────────
   // Wall-clock seconds from start to end, paused time included.
@@ -197,11 +210,12 @@ class SessionModel {
   double get pausedSeconds => totalPausedSeconds.toDouble();
 
   // Seconds elapsed since the last split (or since session start if no splits yet)
+  // Whatever the recorded splits haven't covered, so the splits and this
+  // last leg always add up to the whole session.
   num get currentLegSeconds {
-    if (splits.isEmpty) return elapsedSeconds;
-    final lastSplitAt = splits.last.splitAt;
-    final diff = (endedAt ?? DateTime.now()).difference(lastSplitAt).inSeconds;
-    return diff < 0 ? 0 : diff;
+    final left =
+        elapsedSeconds - splits.fold<int>(0, (a, s) => a + s.durationSeconds);
+    return left < 0 ? 0 : left;
   }
 
 // Charge for the current leg only
@@ -284,6 +298,7 @@ class SessionModel {
           .where((m) => m.name == d['paymentMethod'])
           .firstOrNull,
       debtorName: d['debtorName'],
+      plannedEndAt: (d['plannedEndAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -306,6 +321,8 @@ class SessionModel {
         if (finalTotal != null) 'finalTotal': finalTotal,
         if (paymentMethod != null) 'paymentMethod': paymentMethod!.name,
         if (debtorName != null) 'debtorName': debtorName,
+        'plannedEndAt':
+            plannedEndAt != null ? Timestamp.fromDate(plannedEndAt!) : null,
       };
 
   SessionModel copyWith({
@@ -328,6 +345,8 @@ class SessionModel {
     double? finalTotal,
     PaymentMethod? paymentMethod,
     String? debtorName,
+    DateTime? plannedEndAt,
+    bool clearPlannedEnd = false, // back to an open-ended session
   }) =>
       SessionModel(
         id: id ?? this.id,
@@ -349,6 +368,8 @@ class SessionModel {
         finalTotal: finalTotal ?? this.finalTotal,
         paymentMethod: paymentMethod ?? this.paymentMethod,
         debtorName: debtorName ?? this.debtorName,
+        plannedEndAt:
+            clearPlannedEnd ? null : plannedEndAt ?? this.plannedEndAt,
       );
 }
 

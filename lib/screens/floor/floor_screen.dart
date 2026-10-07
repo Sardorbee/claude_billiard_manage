@@ -511,6 +511,9 @@ class _OpenSessionSheet extends StatefulWidget {
 
 class _OpenSessionSheetState extends State<_OpenSessionSheet> {
   int _guestCount = 2;
+  int? _minutes; // null = open-ended
+
+  static const _durations = <int?>[null, 30, 60, 90, 120];
 
   @override
   Widget build(BuildContext context) {
@@ -550,6 +553,30 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
               Text(' ${widget.table.capacity} gacha', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12)),
             ],
           ),
+          const SizedBox(height: 24),
+          const Text('VAQT', style: TextStyle(color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _durations.map((m) => ChoiceChip(
+              label: Text(m == null ? 'Ochiq' : durationLabel(m)),
+              selected: _minutes == m,
+              selectedColor: AppTheme.green,
+              backgroundColor: AppTheme.surface2,
+              labelStyle: TextStyle(
+                  color: _minutes == m ? AppTheme.bg : AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700),
+              onSelected: (_) => setState(() => _minutes = m),
+            )).toList(),
+          ),
+          if (_minutes != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                  '${durationLabel(_minutes!)} · ${formatCurrency(widget.table.hourlyRate * _minutes! / 60)}',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            ),
           const SizedBox(height: 28),
           SizedBox(
             width: double.infinity,
@@ -563,6 +590,7 @@ class _OpenSessionSheetState extends State<_OpenSessionSheet> {
                   extra: {
                     'table': widget.table,
                     'guestCount': _guestCount,
+                    'plannedMinutes': _minutes,
                   },
                 );
               },

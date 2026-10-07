@@ -82,4 +82,24 @@ void main() {
     expect(_session().paidTotal, 40000);
     expect(_session().copyWith(finalTotal: 41000).paidTotal, 41000);
   });
+
+  test('splits and the last leg add up to the whole session', () {
+    final start = DateTime(2026, 1, 1, 20);
+    final s = _session(minutes: 60).copyWith(splits: [
+      SessionSplit(
+          id: '1',
+          payerName: 'Ali',
+          durationSeconds: 1200,
+          timeCharge: 1200 / 3600 * 40000,
+          splitAt: start.add(const Duration(minutes: 20))),
+      SessionSplit(
+          id: '2',
+          payerName: 'Vali',
+          durationSeconds: 900,
+          timeCharge: 900 / 3600 * 40000,
+          splitAt: start.add(const Duration(minutes: 35))),
+    ]);
+    expect(s.currentLegSeconds, 3600 - 1200 - 900);
+    expect(s.splitTotal + s.currentLegCharge, closeTo(s.timeCharge, 0.001));
+  });
 }

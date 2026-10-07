@@ -7,6 +7,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'firebase_options.dart';
 import 'blocs/blocs.dart';
 import 'repositories/repositories.dart';
+import 'services/table_time_notifier.dart';
 import 'theme/app_theme.dart';
 import 'utils/router.dart';
 
@@ -101,6 +102,7 @@ class _BlocProvidersState extends State<_BlocProviders> {
   late final MenuBloc _menuBloc;
   late final BookingsBloc _bookingsBloc;
   late final StatsBloc _statsBloc;
+  final _notifier = TableTimeNotifier();
   // ✅ SessionBloc is intentionally NOT here — a fresh one is created per
   //    session screen so multiple tables never share state.
 
@@ -124,8 +126,16 @@ class _BlocProvidersState extends State<_BlocProviders> {
         BlocProvider.value(value: _bookingsBloc),
         BlocProvider.value(value: _statsBloc),
       ],
-      child: BlocListener<AuthBloc, AuthState>(
-        listener: _onAuthChange,
+      child: MultiBlocListener(
+        listeners: [
+          BlocListener<AuthBloc, AuthState>(listener: _onAuthChange),
+          // Keep the phone's time-up notifications in step with the floor.
+          BlocListener<FloorBloc, FloorState>(
+            listener: (_, state) {
+              if (state is FloorLoaded) _notifier.sync(state.allTables);
+            },
+          ),
+        ],
         child: _AppRoot(authBloc: _authBloc),
       ),
     );
@@ -134,8 +144,15 @@ class _BlocProvidersState extends State<_BlocProviders> {
   void _onAuthChange(BuildContext context, AuthState state) {
     context.read<ActivityRepository>().actor =
         state is AuthAuthenticated ? state.user : null;
+    if (state is AuthUnauthenticated) _notifier.clear();
     if (state is AuthAuthenticated) {
       final user = state.user;
+      // Ask for notification permission once someone is signed in, then
+      // schedule for whatever is already on the floor.
+      _notifier.init().then((_) {
+        final floor = _floorBloc.state;
+        if (floor is FloorLoaded) _notifier.sync(floor.allTables);
+      });
       _floorBloc.add(FloorLoadRequested(user.venueId));
       _menuBloc.add(MenuLoadRequested(user.venueId));
       _bookingsBloc.add(BookingsLoadRequested(user.venueId));

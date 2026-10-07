@@ -260,6 +260,8 @@ class _ActiveSessionView extends StatelessWidget {
                     timeLabel: _formatTime(state.elapsedSeconds),
                     subLabel: formatCurrency(state.currentTimeCharge),
                   ),
+                  _TimeLimitButton(state: state),
+                  const SizedBox(height: 8),
 
                   // Quick actions
                   Row(
@@ -560,6 +562,94 @@ class _ActiveSessionView extends StatelessWidget {
           onConfirm: (items) => context
               .read<SessionBloc>()
               .add(SessionAddItemsRequested(items)),
+        ),
+      ),
+    );
+  }
+}
+
+// Shows a fixed-time session's countdown; tapping it sets, extends or
+// removes the limit.
+class _TimeLimitButton extends StatelessWidget {
+  final SessionActive state;
+  const _TimeLimitButton({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = state.remainingSeconds;
+    final endsAt = state.session.plannedEndAt;
+    return TextButton(
+      onPressed: () => _showSheet(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.timer_outlined, size: 16, color: AppTheme.textMuted),
+          const SizedBox(width: 6),
+          if (remaining == null)
+            const Text("Vaqt cheklovi yo'q",
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 13))
+          else ...[
+            TimeLeftLabel(remainingSeconds: remaining, fontSize: 13),
+            Text(' · ${DateFormat('HH:mm').format(endsAt!)} gacha',
+                style:
+                    const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showSheet(BuildContext context) {
+    final bloc = context.read<SessionBloc>();
+    final endsAt = state.session.plannedEndAt;
+    void apply(DateTime? end) {
+      bloc.add(SessionPlannedEndChanged(end));
+      Navigator.pop(context);
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(endsAt == null ? 'Vaqt belgilash' : 'Vaqtni uzaytirish',
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [30, 60, 90, 120]
+                  .map((m) => ActionChip(
+                        // An existing limit is pushed back; a new one counts
+                        // from now.
+                        label: Text(endsAt == null
+                            ? 'Hozirdan ${durationLabel(m)}'
+                            : '+${durationLabel(m)}'),
+                        backgroundColor: AppTheme.surface2,
+                        labelStyle: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w700),
+                        onPressed: () => apply((endsAt ?? DateTime.now())
+                            .add(Duration(minutes: m))),
+                      ))
+                  .toList(),
+            ),
+            if (endsAt != null) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () => apply(null),
+                icon: const Icon(Icons.timer_off_outlined,
+                    size: 18, color: AppTheme.red),
+                label: const Text('Cheklovni olib tashlash',
+                    style: TextStyle(color: AppTheme.red)),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1250,7 +1340,9 @@ class _SplitSheetState extends State<_SplitSheet> {
               onPressed: () {
                 final name = _nameCtrl.text.trim();
                 if (name.isEmpty) return;
-                context.read<SessionBloc>().add(SessionSplitRequested(name));
+                context
+                    .read<SessionBloc>()
+                    .add(SessionSplitRequested(name, quote: s));
                 Navigator.pop(context);
               },
               icon: const Icon(Icons.call_split, size: 18),
