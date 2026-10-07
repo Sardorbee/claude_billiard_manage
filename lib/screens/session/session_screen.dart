@@ -532,7 +532,12 @@ class _ActiveSessionView extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
-      builder: (_) => _TransferSheet(currentTableId: state.session.tableId),
+      // The sheet sits above this route in the widget tree, so it needs
+      // the route's SessionBloc handed to it.
+      builder: (_) => BlocProvider.value(
+        value: context.read<SessionBloc>(),
+        child: _TransferSheet(currentTableId: state.session.tableId),
+      ),
     );
   }
 

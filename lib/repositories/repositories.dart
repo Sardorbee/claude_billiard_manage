@@ -7,11 +7,74 @@ import '../models/models.dart';
 
 const _uuid = Uuid();
 
+String _money(double amount) =>
+    amount.toStringAsFixed(amount % 1 == 0 ? 0 : 2);
+
+// ─── ACTIVITY REPOSITORY ─────────────────────────────────────────────────────
+
+// The owner's record of sensitive actions. Other repositories write to it
+// as part of the action itself; entries are never edited or deleted.
+class ActivityRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  // The signed-in user, set at sign-in, so every entry says who did it.
+  AppUser? actor;
+
+  DocumentReference<Map<String, dynamic>> _newRef(String venueId) =>
+      _db.collection('venues').doc(venueId).collection('activity').doc();
+
+  Map<String, dynamic>? _entry(String type, String subject, String? detail) {
+    final by = actor;
+    if (by == null) return null;
+    return ActivityEntry(
+      id: '',
+      type: type,
+      subject: subject,
+      detail: detail,
+      byUid: by.uid,
+      byName: by.name,
+      at: DateTime.now(),
+    ).toFirestore();
+  }
+
+  // For actions that are a plain write. A failed log must not undo or block
+  // the action it describes, so errors are swallowed.
+  Future<void> log(String venueId, String type, String subject,
+      {String? detail}) async {
+    final entry = _entry(type, subject, detail);
+    if (entry == null) return;
+    try {
+      await _newRef(venueId).set(entry);
+    } catch (_) {}
+  }
+
+  // For actions inside a transaction: the entry commits with the action.
+  void logIn(Transaction tx, String venueId, String type, String subject,
+      {String? detail}) {
+    final entry = _entry(type, subject, detail);
+    if (entry != null) tx.set(_newRef(venueId), entry);
+  }
+
+  Stream<List<ActivityEntry>> watchRecent(String venueId, {int limit = 200}) {
+    return _db
+        .collection('venues')
+        .doc(venueId)
+        .collection('activity')
+        .orderBy('at', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snap) => snap.docs.map(ActivityEntry.fromFirestore).toList());
+  }
+}
+
 // ─── AUTH REPOSITORY ─────────────────────────────────────────────────────────
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  AuthRepository(this._activity);
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
@@ -59,6 +122,8 @@ class AuthRepository {
       );
       // Written as the manager, which is what the security rules require.
       await _db.collection('users').doc(user.uid).set(user.toFirestore());
+      await _activity.log(venueId, ActivityType.staffCreated, name,
+          detail: role.name);
       await secondaryAuth.signOut();
       return user;
     } finally {
@@ -77,6 +142,9 @@ class AuthRepository {
 
 class TableRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  TableRepository(this._activity);
 
   Stream<List<TableModel>> watchTables(String venueId) {
     return _db
@@ -106,16 +174,27 @@ class TableRepository {
       status: TableStatus.open, hourlyRate: table.hourlyRate, capacity: table.capacity,
     );
     await ref.set(newTable.toFirestore());
+    await _activity.log(venueId, ActivityType.tableAdded, table.name,
+        detail: _money(table.hourlyRate));
     return newTable;
   }
 
-  Future<void> updateTable(String venueId, TableModel table) =>
-      _db.collection('venues').doc(venueId).collection('tables').doc(table.id)
-          .update(table.toFirestore());
+  // Pass [previous] when editing so a change of hourly rate is logged.
+  Future<void> updateTable(String venueId, TableModel table,
+      {TableModel? previous}) async {
+    await _db.collection('venues').doc(venueId).collection('tables').doc(table.id)
+        .update(table.toFirestore());
+    if (previous != null && previous.hourlyRate != table.hourlyRate) {
+      await _activity.log(venueId, ActivityType.tableRateChanged, table.name,
+          detail: '${_money(previous.hourlyRate)} → ${_money(table.hourlyRate)}');
+    }
+  }
 
-  Future<void> deleteTable(String venueId, String tableId) =>
-      _db.collection('venues').doc(venueId).collection('tables').doc(tableId)
-          .update({'isActive': false});
+  Future<void> deleteTable(String venueId, TableModel table) async {
+    await _db.collection('venues').doc(venueId).collection('tables').doc(table.id)
+        .update({'isActive': false});
+    await _activity.log(venueId, ActivityType.tableDeleted, table.name);
+  }
 }
 
 // ─── SESSION REPOSITORY ───────────────────────────────────────────────────────
@@ -125,8 +204,9 @@ class SessionRepository {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final DebtRepository _debts;
+  final ActivityRepository _activity;
 
-  SessionRepository(this._debts);
+  SessionRepository(this._debts, this._activity);
   static final FirebaseDatabase liveDatabase = FirebaseDatabase.instanceFor(
     app: Firebase.app(),
     databaseURL: 'https://billiard-manage-default-rtdb.asia-southeast1.firebasedatabase.app',
@@ -262,7 +342,10 @@ class SessionRepository {
       if (to != null && to['status'] == 'active' && to['currentSessionId'] != null) {
         throw Exception('$toTableName already has an active session');
       }
+      final fromName = (await tx.get(sessionRef)).data()?['tableName'] ?? '';
       tx.update(sessionRef, {'tableId': toTableId, 'tableName': toTableName});
+      _activity.logIn(tx, venueId, ActivityType.sessionTransferred, fromName,
+          detail: '→ $toTableName');
       tx.update(fromRef, {'status': 'open', 'currentSessionId': null});
       tx.update(toRef, {'status': 'active', 'currentSessionId': sessionId});
     });
@@ -284,9 +367,13 @@ class SessionRepository {
       _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
           .update({'notes': notes});
 
-  Future<void> applyDiscount(String venueId, String sessionId, double discountPct) =>
-      _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
-          .update({'discount': discountPct});
+  Future<void> applyDiscount(String venueId, String sessionId, double discountPct,
+      {required String tableName}) async {
+    await _db.collection('venues').doc(venueId).collection('sessions').doc(sessionId)
+        .update({'discount': discountPct});
+    await _activity.log(venueId, ActivityType.discountApplied, tableName,
+        detail: '${_money(discountPct)}%');
+  }
 
   Future<SessionModel> checkoutSession({
     required String venueId,
@@ -345,6 +432,8 @@ class SessionRepository {
     final tableRef = _db.collection('venues').doc(venueId).collection('tables').doc(tableId);
     await _db.runTransaction((tx) async {
       await _ensureActive(tx, sessionRef);
+      final tableName = (await tx.get(sessionRef)).data()?['tableName'] ?? '';
+      _activity.logIn(tx, venueId, ActivityType.sessionVoided, tableName);
       tx.update(sessionRef, {'status': 'voided', 'endedAt': Timestamp.fromDate(DateTime.now())});
       tx.update(tableRef, {'status': 'open', 'currentSessionId': null});
     });
@@ -413,6 +502,18 @@ class SessionRepository {
     return _debts.customerRefFor(venueId, name);
   }
 
+  // Every session closed (completed or voided) in [from, to). Filtered by
+  // end time alone so it needs no composite index; callers split by status.
+  Future<List<SessionModel>> getSessionsEndedBetween(
+      String venueId, DateTime from, DateTime to) async {
+    final snap = await _db
+        .collection('venues').doc(venueId).collection('sessions')
+        .where('endedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('endedAt', isLessThan: Timestamp.fromDate(to))
+        .get();
+    return snap.docs.map(SessionModel.fromFirestore).toList();
+  }
+
   // History queries
   Stream<List<SessionModel>> watchRecentSessions(String venueId, {int limit = 50}) {
     return _db
@@ -443,6 +544,9 @@ class SessionRepository {
 
 class MenuRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  MenuRepository(this._activity);
 
   Stream<List<MenuItem>> watchMenu(String venueId) {
     return _db
@@ -462,6 +566,8 @@ class MenuRepository {
       isAvailable: item.isAvailable, stockCount: item.stockCount, venueId: venueId,
     );
     await ref.set(newItem.toFirestore());
+    await _activity.log(venueId, ActivityType.menuItemAdded, item.name,
+        detail: _money(item.price));
     return newItem;
   }
 
@@ -469,8 +575,11 @@ class MenuRepository {
       _db.collection('venues').doc(venueId).collection('menu').doc(item.id)
           .update(item.toFirestore());
 
-  Future<void> deleteItem(String venueId, String itemId) =>
-      _db.collection('venues').doc(venueId).collection('menu').doc(itemId).delete();
+  Future<void> deleteItem(String venueId, MenuItem item) async {
+    await _db.collection('venues').doc(venueId).collection('menu').doc(item.id).delete();
+    await _activity.log(venueId, ActivityType.menuItemDeleted, item.name,
+        detail: _money(item.price));
+  }
 
   Future<void> toggleAvailability(String venueId, String itemId, bool isAvailable) =>
       _db.collection('venues').doc(venueId).collection('menu').doc(itemId)
@@ -567,6 +676,9 @@ class BookingRepository {
 
 class DebtRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  DebtRepository(this._activity);
 
   CollectionReference<Map<String, dynamic>> _customers(String venueId) =>
       _db.collection('venues').doc(venueId).collection('customers');
@@ -680,15 +792,29 @@ class DebtRepository {
     required AppUser by,
   }) async {
     final customerRef = await customerRefFor(venueId, name);
-    await _db.runTransaction((tx) => applyEntry(tx,
-        venueId: venueId,
-        customerRef: customerRef,
-        customerName: name,
-        phone: phone,
-        type: DebtEntryType.debt,
-        amount: amount,
-        note: note,
-        by: by));
+    await _db.runTransaction((tx) async {
+      await applyEntry(tx,
+          venueId: venueId,
+          customerRef: customerRef,
+          customerName: name,
+          phone: phone,
+          type: DebtEntryType.debt,
+          amount: amount,
+          note: note,
+          by: by);
+      _activity.logIn(tx, venueId, ActivityType.debtAdded, name.trim(),
+          detail: _money(amount));
+    });
+  }
+
+  // Debt payments and write-offs recorded in [from, to), for the daily report.
+  Future<List<DebtEntry>> getEntriesBetween(
+      String venueId, DateTime from, DateTime to) async {
+    final snap = await _entries(venueId)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+        .where('createdAt', isLessThan: Timestamp.fromDate(to))
+        .get();
+    return snap.docs.map(DebtEntry.fromFirestore).toList();
   }
 
   // Money received (payment) or a balance forgiven (writeoff).
@@ -716,6 +842,10 @@ class DebtRepository {
           paymentMethod: paymentMethod,
           note: note,
           by: by);
+      if (type == DebtEntryType.writeoff) {
+        _activity.logIn(tx, venueId, ActivityType.debtWrittenOff,
+            customer.name, detail: _money(amount));
+      }
     });
   }
 
@@ -732,6 +862,16 @@ class DebtRepository {
 
 class VenueRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ActivityRepository _activity;
+
+  VenueRepository(this._activity);
+
+  Future<void> setDayEndHour(String venueId, int hour) async {
+    await _db.collection('venues').doc(venueId)
+        .set({'dayEndHour': hour}, SetOptions(merge: true));
+    await _activity.log(venueId, ActivityType.dayEndChanged,
+        '${hour.toString().padLeft(2, '0')}:00');
+  }
 
   // Emits defaults when the venue has no document of its own yet.
   Stream<Venue> watchVenue(String venueId) =>

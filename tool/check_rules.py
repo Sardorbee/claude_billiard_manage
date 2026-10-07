@@ -116,6 +116,15 @@ check("admin creates a staff profile",
       write("users/new2", {"name": "n", "role": "staff", "venueId": "test-venue"}, admin, mask=False), True)
 check("worker reads the admin's profile", read(f"users/{admin_uid}", worker), False)
 
+log = {"type": "sessionTransferred", "subject": "Stol 1", "byName": "x"}
+check("worker's action is logged", write(f"{V}/activity/a1", {**log, "byUid": worker_uid}, worker, mask=False), True)
+check("worker logs an action in the admin's name",
+      write(f"{V}/activity/a2", {**log, "byUid": admin_uid}, worker, mask=False), False)
+check("worker reads the activity log", read(f"{V}/activity/a1", worker), False)
+check("admin reads the activity log", read(f"{V}/activity/a1", admin), True)
+check("admin edits an activity entry", write(f"{V}/activity/a1", {"subject": "y"}, admin), False)
+check("admin sets the day-end hour", write(V, {"dayEndHour": 5}, admin), True)
+
 live = f"{RTDB}/venues/test-venue/sessions/table-9.json?ns={NS}"
 good = {"sessionId": "s", "startedAt": 1, "totalPausedMs": 0, "status": "active"}
 check("signed-out user reads live timers", call(live)[0], False)

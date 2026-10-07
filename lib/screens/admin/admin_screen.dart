@@ -20,7 +20,7 @@ class _AdminScreenState extends State<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -41,10 +41,14 @@ class _AdminScreenState extends State<AdminScreen>
           unselectedLabelColor: AppTheme.textMuted,
           indicatorColor: AppTheme.green,
           indicatorSize: TabBarIndicatorSize.tab,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'TABLES'),
             Tab(text: 'MENU'),
             Tab(text: 'STAFF'),
+            Tab(text: 'JURNAL'),
+            Tab(text: 'SOZLAMALAR'),
           ],
         ),
       ),
@@ -54,6 +58,8 @@ class _AdminScreenState extends State<AdminScreen>
           _TablesTab(),
           _MenuTab(),
           _StaffTab(),
+          _ActivityTab(),
+          _SettingsTab(),
         ],
       ),
     );
@@ -245,7 +251,7 @@ class _AdminTableRow extends StatelessWidget {
                       onPressed: () {
                         context
                             .read<TableRepository>()
-                            .deleteTable(user.venueId, table.id);
+                            .deleteTable(user.venueId, table);
                         Navigator.pop(_);
                       },
                       child: const Text('DELETE'),
@@ -404,7 +410,8 @@ class _EditTableSheetState extends State<_EditTableSheet> {
                       hourlyRate: double.tryParse(_rateCtrl.text) ??
                           widget.table.hourlyRate,
                       type: _type,
-                    ));
+                    ),
+                    previous: widget.table);
                 Navigator.pop(context);
               },
               child: const Text('SAVE CHANGES'),
@@ -987,6 +994,232 @@ class _AddStaffSheetState extends State<_AddStaffSheet> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: AppTheme.red),
+    );
+  }
+}
+
+// ─── ACTIVITY TAB ────────────────────────────────────────────────────────────
+
+class _ActivityTab extends StatefulWidget {
+  const _ActivityTab();
+
+  @override
+  State<_ActivityTab> createState() => _ActivityTabState();
+}
+
+class _ActivityTabState extends State<_ActivityTab> {
+  Stream<List<ActivityEntry>>? _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _entries = context
+          .read<ActivityRepository>()
+          .watchRecent(authState.user.venueId);
+    }
+  }
+
+  static (String, IconData, Color) _look(String type) => switch (type) {
+        ActivityType.sessionVoided => (
+            'Seans bekor qilindi',
+            Icons.delete_outline,
+            AppTheme.red
+          ),
+        ActivityType.discountApplied => (
+            'Chegirma berildi',
+            Icons.discount_outlined,
+            AppTheme.amber
+          ),
+        ActivityType.sessionTransferred => (
+            'Stol almashtirildi',
+            Icons.swap_horiz,
+            AppTheme.blue
+          ),
+        ActivityType.tableAdded => (
+            "Stol qo'shildi",
+            Icons.add_box_outlined,
+            AppTheme.textSecondary
+          ),
+        ActivityType.tableRateChanged => (
+            "Stol narxi o'zgardi",
+            Icons.price_change_outlined,
+            AppTheme.amber
+          ),
+        ActivityType.tableDeleted => (
+            "Stol o'chirildi",
+            Icons.delete_outline,
+            AppTheme.red
+          ),
+        ActivityType.menuItemAdded => (
+            "Mahsulot qo'shildi",
+            Icons.add_box_outlined,
+            AppTheme.textSecondary
+          ),
+        ActivityType.menuItemDeleted => (
+            "Mahsulot o'chirildi",
+            Icons.delete_outline,
+            AppTheme.red
+          ),
+        ActivityType.debtAdded => (
+            "Qarz qo'lda qo'shildi",
+            Icons.receipt_long_outlined,
+            AppTheme.amber
+          ),
+        ActivityType.debtWrittenOff => (
+            'Qarz kechildi',
+            Icons.money_off,
+            AppTheme.red
+          ),
+        ActivityType.staffCreated => (
+            "Xodim qo'shildi",
+            Icons.person_add_outlined,
+            AppTheme.textSecondary
+          ),
+        ActivityType.dayEndChanged => (
+            "Kun tugash vaqti o'zgardi",
+            Icons.schedule,
+            AppTheme.textSecondary
+          ),
+        _ => (type, Icons.info_outline, AppTheme.textSecondary),
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<ActivityEntry>>(
+      stream: _entries,
+      builder: (context, snap) {
+        if (snap.hasError) {
+          return Center(
+              child: Text('${snap.error}',
+                  style: const TextStyle(color: AppTheme.red)));
+        }
+        if (!snap.hasData) {
+          return const Center(
+              child: CircularProgressIndicator(color: AppTheme.green));
+        }
+        final entries = snap.data!;
+        if (entries.isEmpty) {
+          return const Center(
+              child: Text("Hozircha yozuvlar yo'q",
+                  style: TextStyle(color: AppTheme.textMuted)));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: entries.length,
+          itemBuilder: (context, i) {
+            final e = entries[i];
+            final (label, icon, color) = _look(e.type);
+            final what =
+                [e.subject, if ((e.detail ?? '').isNotEmpty) e.detail!].join(' · ');
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                border: Border.all(color: AppTheme.border),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(label,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(what,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12)),
+                        Text('${formatDate(e.at)} · ${e.byName}',
+                            style: const TextStyle(
+                                color: AppTheme.textMuted, fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+// ─── SETTINGS TAB ────────────────────────────────────────────────────────────
+
+class _SettingsTab extends StatefulWidget {
+  const _SettingsTab();
+
+  @override
+  State<_SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<_SettingsTab> {
+  Stream<Venue>? _venue;
+  String? _venueId;
+
+  @override
+  void initState() {
+    super.initState();
+    final authState = context.read<AuthBloc>().state;
+    if (authState is AuthAuthenticated) {
+      _venueId = authState.user.venueId;
+      _venue = context.read<VenueRepository>().watchVenue(_venueId!);
+    }
+  }
+
+  Future<void> _setHour(int hour) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<VenueRepository>().setDayEndHour(_venueId!, hour);
+    } catch (e) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: AppTheme.red));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Venue>(
+      stream: _venue,
+      builder: (context, snap) {
+        final hour = snap.data?.dayEndHour ?? Venue.defaultDayEndHour;
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Ish kuni tugash vaqti',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 4),
+            const Text(
+                'Kunlik hisobot shu soatda yangi kunga o\'tadi. Klub yarim '
+                'tundan keyin ishlasa, yopilishdan keyingi soatni tanlang.',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              // Rebuild when the stored value arrives or changes elsewhere.
+              key: ValueKey(hour),
+              initialValue: hour,
+              dropdownColor: AppTheme.surface2,
+              decoration: const InputDecoration(labelText: 'Soat'),
+              items: List.generate(
+                  13,
+                  (h) => DropdownMenuItem(
+                      value: h,
+                      child: Text('${h.toString().padLeft(2, '0')}:00'))),
+              onChanged: (h) {
+                if (h != null && h != hour) _setHour(h);
+              },
+            ),
+          ],
+        );
+      },
     );
   }
 }

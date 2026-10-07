@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'daily_close_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../blocs/blocs.dart';
@@ -28,6 +29,17 @@ class _StatsScreenState extends State<StatsScreen> {
       appBar: AppBar(
         title: const Text('Stats & Reports'),
         actions: [
+          TextButton.icon(
+            onPressed: () {
+              final authState = context.read<AuthBloc>().state;
+              if (authState is! AuthAuthenticated) return;
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) =>
+                      DailyCloseScreen(venueId: authState.user.venueId)));
+            },
+            icon: const Icon(Icons.summarize_outlined, size: 18),
+            label: const Text('Kunlik hisobot'),
+          ),
           PopupMenuButton<String>(
             color: AppTheme.surface2,
             initialValue: _range,

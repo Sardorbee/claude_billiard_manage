@@ -45,16 +45,18 @@ class TheFloorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Repositories (singletons)
-    final authRepo = AuthRepository();
-    final tableRepo = TableRepository();
-    final debtRepo = DebtRepository();
-    final sessionRepo = SessionRepository(debtRepo);
-    final menuRepo = MenuRepository();
+    final activityRepo = ActivityRepository();
+    final authRepo = AuthRepository(activityRepo);
+    final tableRepo = TableRepository(activityRepo);
+    final debtRepo = DebtRepository(activityRepo);
+    final sessionRepo = SessionRepository(debtRepo, activityRepo);
+    final menuRepo = MenuRepository(activityRepo);
     final bookingRepo = BookingRepository();
-    final venueRepo = VenueRepository();
+    final venueRepo = VenueRepository(activityRepo);
 
     return MultiRepositoryProvider(
       providers: [
+        RepositoryProvider.value(value: activityRepo),
         RepositoryProvider.value(value: authRepo),
         RepositoryProvider.value(value: tableRepo),
         RepositoryProvider.value(value: sessionRepo),
@@ -130,6 +132,8 @@ class _BlocProvidersState extends State<_BlocProviders> {
   }
 
   void _onAuthChange(BuildContext context, AuthState state) {
+    context.read<ActivityRepository>().actor =
+        state is AuthAuthenticated ? state.user : null;
     if (state is AuthAuthenticated) {
       final user = state.user;
       _floorBloc.add(FloorLoadRequested(user.venueId));

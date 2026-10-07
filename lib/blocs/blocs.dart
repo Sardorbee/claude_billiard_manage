@@ -635,7 +635,8 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
   Future<void> _onDiscount(
       SessionDiscountApplied event, Emitter<SessionState> emit) async {
     if (_venueId == null || _sessionId == null) return;
-    await _sessionRepo.applyDiscount(_venueId!, _sessionId!, event.discountPct);
+    await _sessionRepo.applyDiscount(_venueId!, _sessionId!, event.discountPct,
+        tableName: _session?.tableName ?? '');
     _session = _session?.copyWith(discount: event.discountPct);
     if (state is SessionActive) {
       final s = state as SessionActive;
@@ -888,7 +889,11 @@ class MenuBloc extends Bloc<MenuEvent, MenuState> {
   Future<void> _onDelete(
       MenuItemDeleteRequested event, Emitter<MenuState> emit) async {
     if (_venueId == null) return;
-    await _menuRepo.deleteItem(_venueId!, event.itemId);
+    final s = state;
+    final item = s is MenuLoaded
+        ? s.allItems.where((i) => i.id == event.itemId).firstOrNull
+        : null;
+    if (item != null) await _menuRepo.deleteItem(_venueId!, item);
   }
 
   void _onUpdated(_MenuItemsUpdated event, Emitter<MenuState> emit) {

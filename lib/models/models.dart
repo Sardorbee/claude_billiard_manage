@@ -648,6 +648,193 @@ class DebtEntry {
       };
 }
 
+// ─── BUSINESS DAY & DAILY REPORT ─────────────────────────────────────────────
+
+// The club stays open past midnight, so its "day" runs from the admin's
+// chosen hour to the same hour next morning: with endHour 6, the day named
+// 7 October covers 7 Oct 06:00 up to 8 Oct 06:00.
+class BusinessDay {
+  final DateTime date; // the calendar date the day is named after
+  final DateTime start; // inclusive
+  final DateTime end; // exclusive
+
+  const BusinessDay._(this.date, this.start, this.end);
+
+  factory BusinessDay.of(DateTime date, int endHour) => BusinessDay._(
+        DateTime(date.year, date.month, date.day),
+        DateTime(date.year, date.month, date.day, endHour),
+        DateTime(date.year, date.month, date.day + 1, endHour),
+      );
+
+  // The business day that [moment] falls in.
+  factory BusinessDay.containing(DateTime moment, int endHour) =>
+      BusinessDay.of(moment.subtract(Duration(hours: endHour)), endHour);
+
+  BusinessDay shifted(int days, int endHour) => BusinessDay.of(
+      DateTime(date.year, date.month, date.day + days), endHour);
+}
+
+class ItemSold {
+  final String name;
+  final String category;
+  final int quantity;
+  final double amount;
+  const ItemSold(this.name, this.category, this.quantity, this.amount);
+}
+
+// Everything the owner checks at the end of a day, worked out from that
+// day's closed sales and the debt payments received.
+class DailyReport {
+  final double tableTime; // after discounts
+  final Map<String, double> byCategory; // food and drink, per menu category
+  final Map<PaymentMethod, double> salesByPayment;
+  final double unknownPayment; // sales closed before payment types existed
+  final Map<PaymentMethod, double> debtPayments; // old debts paid today
+  final List<ItemSold> items;
+  final int tableSessions;
+  final int counterSales;
+  final int voided;
+
+  const DailyReport({
+    required this.tableTime,
+    required this.byCategory,
+    required this.salesByPayment,
+    required this.unknownPayment,
+    required this.debtPayments,
+    required this.items,
+    required this.tableSessions,
+    required this.counterSales,
+    required this.voided,
+  });
+
+  double get foodAndDrink => byCategory.values.fold(0, (a, b) => a + b);
+  double get totalSales => tableTime + foodAndDrink;
+
+  double _sales(PaymentMethod m) => salesByPayment[m] ?? 0;
+  double _repaid(PaymentMethod m) => debtPayments[m] ?? 0;
+
+  // Money that should physically be there: today's sales paid that way plus
+  // old debts settled that way.
+  double get cashExpected =>
+      _sales(PaymentMethod.cash) + _repaid(PaymentMethod.cash);
+  double get transferExpected =>
+      _sales(PaymentMethod.transfer) + _repaid(PaymentMethod.transfer);
+  double get soldOnDebt => _sales(PaymentMethod.debt);
+
+  factory DailyReport.from(
+      List<SessionModel> sessions, List<DebtEntry> debtEntries) {
+    double tableTime = 0, unknown = 0;
+    int tableSessions = 0, counterSales = 0, voided = 0;
+    final byCategory = <String, double>{};
+    final byPayment = <PaymentMethod, double>{};
+    final items = <String, ItemSold>{};
+
+    for (final s in sessions) {
+      if (s.status == 'voided') voided++;
+      if (s.status != 'completed') continue;
+      s.isCounterSale ? counterSales++ : tableSessions++;
+
+      // What was charged minus food and drink, so the lines of the report
+      // always add up to the money taken.
+      tableTime += s.paidTotal - s.fbTotal;
+      s.fbByCategory.forEach(
+          (c, amount) => byCategory[c] = (byCategory[c] ?? 0) + amount);
+      final method = s.paymentMethod;
+      if (method == null) {
+        unknown += s.paidTotal;
+      } else {
+        byPayment[method] = (byPayment[method] ?? 0) + s.paidTotal;
+      }
+      for (final i in s.orderItems) {
+        final prev = items[i.menuItemId];
+        items[i.menuItemId] = ItemSold(i.name, i.category,
+            (prev?.quantity ?? 0) + i.quantity,
+            (prev?.amount ?? 0) + i.subtotal);
+      }
+    }
+
+    final repaid = <PaymentMethod, double>{};
+    for (final e in debtEntries) {
+      if (e.type != DebtEntryType.payment) continue;
+      final method = e.paymentMethod ?? PaymentMethod.cash;
+      repaid[method] = (repaid[method] ?? 0) + e.amount;
+    }
+
+    return DailyReport(
+      tableTime: tableTime,
+      byCategory: byCategory,
+      salesByPayment: byPayment,
+      unknownPayment: unknown,
+      debtPayments: repaid,
+      items: items.values.toList()
+        ..sort((a, b) => b.amount.compareTo(a.amount)),
+      tableSessions: tableSessions,
+      counterSales: counterSales,
+      voided: voided,
+    );
+  }
+}
+
+// ─── ACTIVITY LOG ────────────────────────────────────────────────────────────
+
+// The kinds of action the owner wants a record of.
+abstract class ActivityType {
+  static const sessionVoided = 'sessionVoided';
+  static const discountApplied = 'discountApplied';
+  static const sessionTransferred = 'sessionTransferred';
+  static const tableAdded = 'tableAdded';
+  static const tableRateChanged = 'tableRateChanged';
+  static const tableDeleted = 'tableDeleted';
+  static const menuItemAdded = 'menuItemAdded';
+  static const menuItemDeleted = 'menuItemDeleted';
+  static const debtAdded = 'debtAdded';
+  static const debtWrittenOff = 'debtWrittenOff';
+  static const staffCreated = 'staffCreated';
+  static const dayEndChanged = 'dayEndChanged';
+}
+
+class ActivityEntry {
+  final String id;
+  final String type; // an ActivityType
+  final String subject; // the table, item or person it happened to
+  final String? detail; // e.g. "40000 → 30000" or "50%"
+  final String byUid;
+  final String byName;
+  final DateTime at;
+
+  const ActivityEntry({
+    required this.id,
+    required this.type,
+    required this.subject,
+    this.detail,
+    required this.byUid,
+    required this.byName,
+    required this.at,
+  });
+
+  factory ActivityEntry.fromFirestore(DocumentSnapshot doc) {
+    final d = doc.data() as Map<String, dynamic>;
+    return ActivityEntry(
+      id: doc.id,
+      type: d['type'] ?? '',
+      subject: d['subject'] ?? '',
+      detail: d['detail'],
+      byUid: d['byUid'] ?? '',
+      byName: d['byName'] ?? '',
+      at: (d['at'] as Timestamp).toDate(),
+    );
+  }
+
+  Map<String, dynamic> toFirestore() => {
+        'type': type,
+        'subject': subject,
+        'detail': detail,
+        'byUid': byUid,
+        'byName': byName,
+        'at': Timestamp.fromDate(at),
+      };
+}
+
 // ─── APP USER ────────────────────────────────────────────────────────────────
 
 enum UserRole { staff, supervisor, manager, owner }
@@ -717,6 +904,9 @@ class Venue {
   final bool isOpen;
   final String? logoUrl;
   final List<String> menuCategories; // the admin's list; menu items pick one
+  final int dayEndHour; // hour (0-23) at which the business day rolls over
+
+  static const defaultDayEndHour = 6;
 
   static const defaultMenuCategories = ['Non-dog', 'Ichimliklar', 'Sigaret'];
 
@@ -730,6 +920,7 @@ class Venue {
     this.isOpen = true,
     this.logoUrl,
     this.menuCategories = defaultMenuCategories,
+    this.dayEndHour = defaultDayEndHour,
   });
 
   factory Venue.fromFirestore(DocumentSnapshot doc) {
@@ -747,6 +938,7 @@ class Venue {
       menuCategories: categories == null || categories.isEmpty
           ? defaultMenuCategories
           : categories,
+      dayEndHour: d['dayEndHour'] ?? defaultDayEndHour,
     );
   }
 
@@ -759,5 +951,6 @@ class Venue {
         'isOpen': isOpen,
         'logoUrl': logoUrl,
         'menuCategories': menuCategories,
+        'dayEndHour': dayEndHour,
       };
 }

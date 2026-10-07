@@ -114,6 +114,16 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // The owner's record of sensitive actions. Staff actions are written
+      // to it, but only those above staff can read it, and nobody can
+      // change or remove an entry.
+      match /activity/{entryId} {
+        allow read: if canOverride(venueId);
+        allow create: if inVenue(venueId)
+          && request.resource.data.byUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+
       match /bookings/{bookingId} {
         allow read, write: if inVenue(venueId);
       }
