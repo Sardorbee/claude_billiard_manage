@@ -437,6 +437,7 @@ class _MenuTab extends StatefulWidget {
 class _MenuTabState extends State<_MenuTab> {
   Stream<Venue>? _venue;
   String? _venueId;
+  String? _category; // the category being shown; null shows them all
 
   @override
   void initState() {
@@ -458,6 +459,11 @@ class _MenuTabState extends State<_MenuTab> {
         return BlocBuilder<MenuBloc, MenuState>(
           builder: (context, state) {
             final items = state is MenuLoaded ? state.allItems : <MenuItem>[];
+            // A category that was renamed or removed no longer filters.
+            final category = categories.contains(_category) ? _category : null;
+            final shown = category == null
+                ? items
+                : items.where((i) => i.category == category).toList();
             return Scaffold(
               backgroundColor: AppTheme.bg,
               floatingActionButton: FloatingActionButton(
@@ -471,18 +477,24 @@ class _MenuTabState extends State<_MenuTab> {
                 children: [
                   _CategoriesBar(
                     categories: categories,
+                    selected: category,
+                    onSelect: (c) => setState(() => _category = c),
                     onEdit: () => _showCategoriesDialog(
                         context, categories, items),
                   ),
                   const SizedBox(height: 12),
-                  if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 48),
+                  if (shown.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 48),
                       child: Center(
-                          child: Text("Menyuda hali mahsulot yo'q",
-                              style: TextStyle(color: AppTheme.textMuted))),
+                          child: Text(
+                              items.isEmpty
+                                  ? "Menyuda hali mahsulot yo'q"
+                                  : "Bu kategoriyada mahsulot yo'q",
+                              style:
+                                  const TextStyle(color: AppTheme.textMuted))),
                     ),
-                  ...items.map((item) =>
+                  ...shown.map((item) =>
                       _AdminMenuRow(item: item, categories: categories)),
                 ],
               ),
@@ -523,8 +535,14 @@ class _MenuTabState extends State<_MenuTab> {
 
 class _CategoriesBar extends StatelessWidget {
   final List<String> categories;
+  final String? selected; // null = all categories
+  final ValueChanged<String?> onSelect;
   final VoidCallback onEdit;
-  const _CategoriesBar({required this.categories, required this.onEdit});
+  const _CategoriesBar(
+      {required this.categories,
+      required this.selected,
+      required this.onSelect,
+      required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -534,7 +552,17 @@ class _CategoriesBar extends StatelessWidget {
           child: Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: categories.map((c) => StatusBadge(c)).toList(),
+            children: [
+              _CategoryFilterChip(
+                  label: 'Hammasi',
+                  selected: selected == null,
+                  onTap: () => onSelect(null)),
+              // Tapping the chosen category again shows everything.
+              ...categories.map((c) => _CategoryFilterChip(
+                  label: c,
+                  selected: c == selected,
+                  onTap: () => onSelect(c == selected ? null : c))),
+            ],
           ),
         ),
         TextButton.icon(
@@ -543,6 +571,40 @@ class _CategoriesBar extends StatelessWidget {
           label: const Text('Kategoriyalar'),
         ),
       ],
+    );
+  }
+}
+
+class _CategoryFilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _CategoryFilterChip(
+      {required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppTheme.green : AppTheme.textMuted;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withOpacity(selected ? 0.15 : 0.12),
+          border: Border.all(color: color.withOpacity(selected ? 1 : 0.4)),
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: color,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.08,
+          ),
+        ),
+      ),
     );
   }
 }

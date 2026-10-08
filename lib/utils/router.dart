@@ -9,6 +9,7 @@ import '../screens/floor/floor_screen.dart';
 import '../screens/session/session_screen.dart';
 import '../screens/debts/debts_screen.dart';
 import '../screens/stats/stats_screen.dart';
+import '../screens/history/history_screen.dart';
 import '../screens/admin/admin_screen.dart';
 
 class AppRouter {
@@ -55,14 +56,14 @@ class AppRouter {
 
             int currentIndex = 0;
             final loc = state.matchedLocation;
-            if (loc.startsWith('/bookings')) {
-              currentIndex = 4;
-            } else if (loc.startsWith('/debts')) {
+            if (loc.startsWith('/debts')) {
               currentIndex = 1;
             } else if (loc.startsWith('/stats')) {
               currentIndex = 2;
-            } else if (loc.startsWith('/admin')) {
+            } else if (loc.startsWith('/history')) {
               currentIndex = 3;
+            } else if (loc.startsWith('/admin')) {
+              currentIndex = 4;
             }
 
             return Scaffold(
@@ -83,6 +84,9 @@ class AppRouter {
                       context.go('/stats');
                       break;
                     case 3:
+                      context.go('/history');
+                      break;
+                    case 4:
                       context.go('/admin');
                       break;
                   }
@@ -95,6 +99,8 @@ class AppRouter {
             // GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
             GoRoute(path: '/debts', builder: (_, __) => const DebtsScreen()),
             GoRoute(path: '/stats', builder: (_, __) => const StatsScreen()),
+            GoRoute(
+                path: '/history', builder: (_, __) => const HistoryScreen()),
             GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
           ],
         ),
@@ -196,6 +202,8 @@ class _BottomNav extends StatelessWidget {
               icon: Icon(Icons.receipt_long_outlined), label: 'Qarzlar'),
           const BottomNavigationBarItem(
               icon: Icon(Icons.bar_chart_rounded), label: 'Hisobot'),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.history_rounded), label: 'Tarix'),
           if (isAdmin)
             const BottomNavigationBarItem(
                 icon: Icon(Icons.admin_panel_settings_outlined),

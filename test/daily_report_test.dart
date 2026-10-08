@@ -171,4 +171,33 @@ void main() {
       expect(month.shifted(3, 6).month, DateTime(2027, 1));
     });
   });
+
+  group('TableHistory', () {
+    test('sums completed sessions and only counts voided ones', () {
+      final h = TableHistory.from([
+        _sale(finalTotal: 50000, items: [
+          const OrderItem(
+              menuItemId: 'cola',
+              name: 'Cola',
+              unitPrice: 10000,
+              quantity: 2,
+              category: 'Ichimliklar'),
+        ]),
+        _sale(finalTotal: 40000),
+        _sale(status: 'voided', finalTotal: 99000),
+      ]);
+      expect(h.completed, 2);
+      expect(h.voided, 1);
+      expect(h.extras, 20000);
+      expect(h.tableTime, 70000);
+      expect(h.total, 90000);
+      expect(h.sessions, hasLength(3));
+    });
+  });
+
+  test('a business year runs from 1 January at the day-end hour', () {
+    final year = BusinessYear(2026, 6);
+    expect(year.start, DateTime(2026, 1, 1, 6));
+    expect(year.end, DateTime(2027, 1, 1, 6));
+  });
 }

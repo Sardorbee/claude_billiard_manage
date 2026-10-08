@@ -173,7 +173,7 @@ class _ActiveSessionView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SectionHeader("Bo'linishlar (${session.splits.length})"),
+                    SectionHeader("Oldingi o'yinlar (${session.splits.length})"),
                     const SizedBox(height: 8),
                     ...session.splits.asMap().entries.map((e) {
                       final split = e.value;
@@ -215,7 +215,9 @@ class _ActiveSessionView extends StatelessWidget {
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 14)),
-                                  Text(_formatTime(split.durationSeconds),
+                                  Text(
+                                      '${splitTimes(split)} · '
+                                      '${_formatTime(split.durationSeconds)}',
                                       style: const TextStyle(
                                           color: AppTheme.textMuted,
                                           fontSize: 12)),
@@ -252,13 +254,18 @@ class _ActiveSessionView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Column(
                 children: [
+                  // The clock shows the game being played now: a restart
+                  // sets it back to zero. The whole session's time and
+                  // money stay in the bar at the bottom.
                   TimerRing(
-                    elapsedSeconds: state.elapsedSeconds,
+                    elapsedSeconds: state.currentLegSeconds,
                     isPaused: state.isPaused,
-                    startedTime:
-                        DateFormat('HH:mm').format(state.session.startedAt),
-                    timeLabel: _formatTime(state.elapsedSeconds),
-                    subLabel: formatCurrency(state.currentTimeCharge),
+                    startedTime: DateFormat('HH:mm').format(
+                        session.splits.isEmpty
+                            ? session.startedAt
+                            : session.splits.last.splitAt),
+                    timeLabel: _formatTime(state.currentLegSeconds),
+                    subLabel: formatCurrency(state.currentLegCharge),
                   ),
                   _TimeLimitButton(state: state),
                   const SizedBox(height: 8),
@@ -283,8 +290,8 @@ class _ActiveSessionView extends StatelessWidget {
                         },
                       ),
                       _ActionButton(
-                        icon: Icons.call_split,
-                        label: "BO'LISH",
+                        icon: Icons.restart_alt,
+                        label: 'RESTART',
                         color: AppTheme.amber,
                         onTap: () => _showSplitSheet(context),
                       ),
@@ -525,7 +532,12 @@ class _ActiveSessionView extends StatelessWidget {
       ),
       builder: (_) => BlocProvider.value(
         value: context.read<SessionBloc>(),
-        child: _SplitSheet(state: state),
+        // Follows the running clock, so the game is recorded up to the
+        // moment of the tap and the new one really starts at zero.
+        child: BlocBuilder<SessionBloc, SessionState>(
+          builder: (_, live) =>
+              _SplitSheet(state: live is SessionActive ? live : state),
+        ),
       ),
     );
   }
@@ -846,7 +858,7 @@ class _BottomBillingBar extends StatelessWidget {
                   formatCurrency(state.pausedTimeCharge),
                   color: AppTheme.amber),
             ],
-            _DialogRow("Qo'shimcha", formatCurrency(state.fbTotal)),
+            _ExtrasRow(state.session.orderItems),
             if (state.session.discount > 0)
               _DialogRow(
                   'Chegirma', '-${formatCurrency(state.discountAmount)}'),
@@ -926,6 +938,81 @@ class _DialogRow extends StatelessWidget {
           ],
         ),
       );
+}
+
+// The food and drink total; tapping it lists what was ordered.
+class _ExtrasRow extends StatefulWidget {
+  final List<OrderItem> items;
+  const _ExtrasRow(this.items);
+
+  @override
+  State<_ExtrasRow> createState() => _ExtrasRowState();
+}
+
+class _ExtrasRowState extends State<_ExtrasRow> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.items;
+    final total = items.fold(0.0, (sum, i) => sum + i.subtotal);
+    if (items.isEmpty) return _DialogRow("Qo'shimcha", formatCurrency(total));
+    return Column(
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                const Text("Qo'shimcha",
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                Icon(_open ? Icons.expand_less : Icons.expand_more,
+                    size: 18, color: AppTheme.textSecondary),
+                const Spacer(),
+                Text(formatCurrency(total),
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13)),
+              ],
+            ),
+          ),
+        ),
+        if (_open)
+          Container(
+            margin: const EdgeInsets.only(top: 2, bottom: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.surface2,
+              border: Border.all(color: AppTheme.border),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              children: items
+                  .map((i) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text('${i.quantity}× ${i.name}',
+                                  style: const TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 12)),
+                            ),
+                            Text(formatCurrency(i.subtotal),
+                                style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 /// Menu picker. Hands the chosen items to [onConfirm] and closes; used for
@@ -1032,7 +1119,7 @@ class _AddItemsSheetState extends State<AddItemsSheet> {
                   crossAxisCount: 3,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
-                  childAspectRatio: 0.75,
+                  childAspectRatio: 0.7,
                 ),
                 itemCount: filtered.length,
                 itemBuilder: (ctx, i) {
@@ -1200,19 +1287,19 @@ class _SplitSheetState extends State<_SplitSheet> {
                   color: AppTheme.amber.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Icon(Icons.call_split,
+                child: const Icon(Icons.restart_alt,
                     color: AppTheme.amber, size: 18),
               ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Bo'linish #$splitCount",
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w800)),
-                  const Text('Bu qism uchun yutqazganni yozing',
+                  const Text('Restart',
                       style:
-                          TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text("$splitCount-o'yin yoziladi, vaqt 0 dan boshlanadi",
+                      style: const TextStyle(
+                          color: AppTheme.textMuted, fontSize: 12)),
                 ],
               ),
             ],
@@ -1232,7 +1319,7 @@ class _SplitSheetState extends State<_SplitSheet> {
               children: [
                 Column(
                   children: [
-                    const Text('QISM VAQTI',
+                    const Text("O'YIN VAQTI",
                         style: TextStyle(
                             color: AppTheme.textMuted,
                             fontSize: 9,
@@ -1246,7 +1333,7 @@ class _SplitSheetState extends State<_SplitSheet> {
                 Container(width: 1, height: 36, color: AppTheme.border),
                 Column(
                   children: [
-                    const Text('QISM SUMMASI',
+                    const Text("O'YIN SUMMASI",
                         style: TextStyle(
                             color: AppTheme.textMuted,
                             fontSize: 9,
@@ -1266,7 +1353,7 @@ class _SplitSheetState extends State<_SplitSheet> {
 
           // Previous splits
           if (s.session.splits.isNotEmpty) ...[
-            const Text("OLDINGI BO'LINISHLAR",
+            const Text("OLDINGI O'YINLAR",
                 style: TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 10,
@@ -1297,7 +1384,9 @@ class _SplitSheetState extends State<_SplitSheet> {
                             style:
                                 const TextStyle(fontWeight: FontWeight.w600)),
                       ),
-                      Text(_fmt(e.value.durationSeconds),
+                      Text(
+                          '${splitTimes(e.value)} · '
+                          '${_fmt(e.value.durationSeconds)}',
                           style: const TextStyle(
                               color: AppTheme.textMuted, fontSize: 12)),
                       const SizedBox(width: 10),
@@ -1312,13 +1401,12 @@ class _SplitSheetState extends State<_SplitSheet> {
           ],
 
           // Loser name input
-          const Text("BU QISMNI KIM TO'LAYDI?",
+          const Text("BU O'YINNI KIM TO'LAYDI? (IXTIYORIY)",
               style: TextStyle(
                   color: AppTheme.textMuted, fontSize: 10, letterSpacing: 0.1)),
           const SizedBox(height: 8),
           TextField(
             controller: _nameCtrl,
-            autofocus: true,
             textCapitalization: TextCapitalization.words,
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: const InputDecoration(
@@ -1339,14 +1427,13 @@ class _SplitSheetState extends State<_SplitSheet> {
               ),
               onPressed: () {
                 final name = _nameCtrl.text.trim();
-                if (name.isEmpty) return;
-                context
-                    .read<SessionBloc>()
-                    .add(SessionSplitRequested(name, quote: s));
+                context.read<SessionBloc>().add(SessionSplitRequested(
+                    name.isEmpty ? "$splitCount-o'yin" : name,
+                    quote: s));
                 Navigator.pop(context);
               },
-              icon: const Icon(Icons.call_split, size: 18),
-              label: Text("BO'LISHNI YOZISH · ${formatCurrency(legCharge)}",
+              icon: const Icon(Icons.restart_alt, size: 18),
+              label: Text("VAQTNI 0 DAN BOSHLASH",
                   style: const TextStyle(fontWeight: FontWeight.w800)),
             ),
           ),
@@ -1423,7 +1510,8 @@ class _ReceiptSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    // Scrolls, since the list of extras can open past the screen.
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
           24, 24, 24, MediaQuery.of(context).padding.bottom + 24),
       child: Column(
@@ -1474,7 +1562,7 @@ class _ReceiptSheet extends StatelessWidget {
                               color: AppTheme.amber.withOpacity(0.4)),
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Text("BO'LINISH $idx",
+                        child: Text("O'YIN $idx",
                             style: const TextStyle(
                                 color: AppTheme.amber,
                                 fontSize: 9,
@@ -1487,6 +1575,7 @@ class _ReceiptSheet extends StatelessWidget {
                     ],
                   ),
                 ),
+                _DialogRow('Vaqti', splitTimes(split)),
                 _DialogRow('Davomiyligi', formatTime(split.durationSeconds)),
                 _DialogRow(
                     'Vaqt haqi', formatCurrency(split.timeCharge),
@@ -1516,7 +1605,7 @@ class _ReceiptSheet extends StatelessWidget {
                 formatCurrency(session.pausedTimeCharge),
                 color: AppTheme.amber),
           ],
-          _DialogRow("Qo'shimcha", formatCurrency(session.fbTotal)),
+          _ExtrasRow(session.orderItems),
           if (session.discount > 0)
             _DialogRow('Chegirma (${session.discount.toInt()}%)',
                 '-${formatCurrency(session.discountAmount)}'),

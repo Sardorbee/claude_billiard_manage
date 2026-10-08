@@ -649,6 +649,27 @@ class SessionRepository {
     return snap.docs.map(SessionModel.fromFirestore).toList();
   }
 
+  // One table's closed sessions (completed or voided) in [from, to). Pass
+  // an empty [tableId] for the sales made without a table.
+  Future<List<SessionModel>> getTableSessionsEndedBetween(
+      String venueId, String tableId, DateTime from, DateTime to) async {
+    try {
+      final snap = await _db
+          .collection('venues').doc(venueId).collection('sessions')
+          .where('tableId', isEqualTo: tableId)
+          .where('endedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(from))
+          .where('endedAt', isLessThan: Timestamp.fromDate(to))
+          .get();
+      return snap.docs.map(SessionModel.fromFirestore).toList();
+    } on FirebaseException catch (e) {
+      // Until the table + end time index in firestore.indexes.json is
+      // deployed, read the whole period and pick the table out here.
+      if (e.code != 'failed-precondition') rethrow;
+      final all = await getSessionsEndedBetween(venueId, from, to);
+      return all.where((s) => s.tableId == tableId).toList();
+    }
+  }
+
   // History queries
   Stream<List<SessionModel>> watchRecentSessions(String venueId, {int limit = 50}) {
     return _db

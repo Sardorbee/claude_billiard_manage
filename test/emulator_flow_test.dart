@@ -505,6 +505,30 @@ void main() {
       expect(colas.quantity, 2 + 1 + 2);
     });
 
+    test("a table's history lists only its own closed sessions", () async {
+      final day = BusinessDay.containing(DateTime.now(), 6);
+      final all =
+          await sessions.getSessionsEndedBetween(venue, day.start, day.end);
+      final byTable = <String, int>{};
+      for (final s in all) {
+        byTable[s.tableId] = (byTable[s.tableId] ?? 0) + 1;
+      }
+      expect(byTable.keys.where((id) => id.isNotEmpty), isNotEmpty);
+      for (final entry in byTable.entries) {
+        final own = await sessions.getTableSessionsEndedBetween(
+            venue, entry.key, day.start, day.end);
+        expect(own, hasLength(entry.value));
+        expect(own.every((s) => s.tableId == entry.key), isTrue);
+      }
+      // The sales made without a table are found under the empty id.
+      expect(byTable[''], 2);
+      // Nothing was closed a year ago.
+      expect(
+          await sessions.getTableSessionsEndedBetween(venue, byTable.keys.first,
+              day.start.subtract(const Duration(days: 365)), day.start),
+          isEmpty);
+    });
+
     test('manages tables', () async {
       final added = await tables.addTable(
           venue,

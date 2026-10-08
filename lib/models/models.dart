@@ -124,6 +124,10 @@ class SessionSplit {
 
   double get total => timeCharge + fbCharge;
 
+  // When this part began; [splitAt] is when it ended.
+  DateTime get startedAt =>
+      splitAt.subtract(Duration(seconds: durationSeconds));
+
   Map<String, dynamic> toMap() => {
         'id': id,
         'payerName': payerName,
@@ -786,6 +790,62 @@ class BusinessMonth {
 
   BusinessMonth shifted(int months, int endHour) =>
       BusinessMonth(DateTime(month.year, month.month + months), endHour);
+}
+
+// A calendar year of business days.
+class BusinessYear {
+  final int year;
+  final DateTime start; // inclusive
+  final DateTime end; // exclusive
+
+  BusinessYear(this.year, int endHour)
+      : start = DateTime(year, 1, 1, endHour),
+        end = DateTime(year + 1, 1, 1, endHour);
+}
+
+// What happened at one table over a period, from its closed sessions.
+// Voided sessions are listed and counted but add nothing to the sums.
+class TableHistory {
+  final List<SessionModel> sessions; // newest first
+  final int completed;
+  final int voided;
+  final double playedSeconds;
+  final double tableTime; // after discounts
+  final double extras; // food and drink
+
+  const TableHistory({
+    required this.sessions,
+    required this.completed,
+    required this.voided,
+    required this.playedSeconds,
+    required this.tableTime,
+    required this.extras,
+  });
+
+  double get total => tableTime + extras;
+
+  factory TableHistory.from(List<SessionModel> sessions) {
+    int completed = 0, voided = 0;
+    double seconds = 0, tableTime = 0, extras = 0;
+    for (final s in sessions) {
+      if (s.status == 'voided') voided++;
+      if (s.status != 'completed') continue;
+      completed++;
+      seconds += s.elapsedSeconds;
+      // As in the daily report: what was charged minus food and drink.
+      tableTime += s.paidTotal - s.fbTotal;
+      extras += s.fbTotal;
+    }
+    return TableHistory(
+      sessions: [...sessions]..sort((a, b) =>
+          (b.endedAt ?? b.startedAt).compareTo(a.endedAt ?? a.startedAt)),
+      completed: completed,
+      voided: voided,
+      playedSeconds: seconds,
+      tableTime: tableTime,
+      extras: extras,
+    );
+  }
 }
 
 class ItemSold {

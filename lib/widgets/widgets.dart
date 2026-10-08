@@ -443,34 +443,37 @@ class MenuItemCard extends StatelessWidget {
               ),
             ),
           ),
-          // Info
-          Expanded(
-            flex: 3,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(item.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          // Info. Takes the height its lines need and leaves the rest to
+          // the image, so it fits however narrow the card gets.
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      formatCurrency(item.price),
                       style: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w600)),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        formatCurrency(item.price),
-                        style: const TextStyle(
-                            color: AppTheme.green,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  if (quantity > 0)
-                    Row(
+                          color: AppTheme.green,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (quantity > 0)
+                  // As tall as the lone "+" below, so cards don't jump.
+                  SizedBox(
+                    height: 24,
+                    child: Row(
                       children: [
                         GestureDetector(
                           onTap: onRemove,
@@ -503,32 +506,32 @@ class MenuItemCard extends StatelessWidget {
                           ),
                         ),
                       ],
-                    )
-                  else
-                    GestureDetector(
-                      onTap: item.isAvailable ? onAdd : null,
-                      child: Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: item.isAvailable
-                              ? AppTheme.green.withOpacity(0.15)
-                              : AppTheme.surface2,
-                          borderRadius: BorderRadius.circular(2),
-                          border: Border.all(
-                              color: item.isAvailable
-                                  ? AppTheme.green.withOpacity(0.4)
-                                  : AppTheme.border),
-                        ),
-                        child: Icon(Icons.add,
-                            size: 14,
-                            color: item.isAvailable
-                                ? AppTheme.green
-                                : AppTheme.textMuted),
-                      ),
                     ),
-                ],
-              ),
+                  )
+                else
+                  GestureDetector(
+                    onTap: item.isAvailable ? onAdd : null,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: item.isAvailable
+                            ? AppTheme.green.withOpacity(0.15)
+                            : AppTheme.surface2,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(
+                            color: item.isAvailable
+                                ? AppTheme.green.withOpacity(0.4)
+                                : AppTheme.border),
+                      ),
+                      child: Icon(Icons.add,
+                          size: 14,
+                          color: item.isAvailable
+                              ? AppTheme.green
+                              : AppTheme.textMuted),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -639,7 +642,6 @@ class TimerRing extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-
           // Center content
           Column(
             mainAxisSize: MainAxisSize.min,
@@ -654,7 +656,6 @@ class TimerRing extends StatelessWidget {
                         fontSize: 14,
                         fontWeight: FontWeight.w600),
                   ),
-
                   Text(
                     startedTime,
                     style: const TextStyle(
@@ -683,7 +684,6 @@ class TimerRing extends StatelessWidget {
                     fontSize: 14,
                     fontWeight: FontWeight.w600),
               ),
-
             ],
           ),
         ],
@@ -697,8 +697,10 @@ class TimerRing extends StatelessWidget {
 // Whole so'm with a space between thousands: 35 000 so'm.
 String formatCurrency(double amount) {
   final whole = amount.round();
-  final digits = whole.abs().toString().replaceAllMapped(
-      RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
+  final digits = whole
+      .abs()
+      .toString()
+      .replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ' ');
   return "${whole < 0 ? '-' : ''}$digits so'm";
 }
 
@@ -738,6 +740,10 @@ String formatTime(int seconds) {
 // Numeric dates need no locale data and read the same in Uzbek.
 String formatDate(DateTime dt) => DateFormat('dd.MM.yyyy · HH:mm').format(dt);
 String formatTimeOnly(DateTime dt) => DateFormat('HH:mm').format(dt);
+
+// When one game of a session was played: 21:05 – 21:40
+String splitTimes(SessionSplit split) =>
+    '${formatTimeOnly(split.startedAt)} – ${formatTimeOnly(split.splitAt)}';
 
 // ─── Payment dialog ──────────────────────────────────────────────────────────
 
@@ -881,8 +887,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
         TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Bekor qilish')),
-        ElevatedButton(
-            onPressed: _confirm, child: Text(widget.confirmLabel)),
+        ElevatedButton(onPressed: _confirm, child: Text(widget.confirmLabel)),
       ],
     );
   }
