@@ -545,9 +545,9 @@ class SessionHistorySheet extends StatelessWidget {
           ],
 
           if (s.splits.isNotEmpty) ...[
-            SectionHeader("Bo'linishlar (${s.splits.length})"),
+            SectionHeader("O'yinlar (${s.splits.length})"),
             ...s.splits.asMap().entries.map((e) => _InfoRow(
-                  '${e.key + 1}. ${e.value.payerName} · ${formatTime(e.value.durationSeconds)}',
+                  '${e.key + 1}. ${e.value.payerName} · ${splitTimes(e.value)} · ${formatTime(e.value.durationSeconds)}',
                   formatCurrency(e.value.total),
                 )),
           ],
