@@ -105,6 +105,10 @@ class FloorScreen extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
         side: BorderSide(color: AppTheme.border),
       ),
+      // Lets a long table list take most of the screen and scroll.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85),
       builder: (_) => _WalkInSheet(
         openTables: openTables,
         onSelected: (table) {
@@ -680,7 +684,10 @@ class _WalkInSheet extends StatelessWidget {
           const Text("Bo'sh stollar", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const Text("Bo'sh stolni tanlang", style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
           const SizedBox(height: 20),
-          ...openTables.map((t) => ListTile(
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: openTables.map((t) => ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Container(
               width: 36, height: 36,
@@ -695,7 +702,9 @@ class _WalkInSheet extends StatelessWidget {
               Navigator.pop(context);
               onSelected(t);
             },
-          )),
+          )).toList(),
+            ),
+          ),
         ],
       ),
     );
