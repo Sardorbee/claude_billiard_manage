@@ -546,6 +546,10 @@ class _ActiveSessionView extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
+      // Lets a long table list take most of the screen and scroll.
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85),
       // The sheet sits above this route in the widget tree, so it needs
       // the route's SessionBloc handed to it.
       builder: (_) => BlocProvider.value(
@@ -1472,7 +1476,10 @@ class _TransferSheet extends StatelessWidget {
                     child: Text("Bo'sh stol yo'q",
                         style: TextStyle(color: AppTheme.textMuted)))
               else
-                ...openTables.map((t) => ListTile(
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: openTables.map((t) => ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Container(
                         width: 36,
@@ -1494,7 +1501,9 @@ class _TransferSheet extends StatelessWidget {
                                 toTableId: t.id, toTableName: t.name));
                         Navigator.pop(context);
                       },
-                    )),
+                    )).toList(),
+                  ),
+                ),
             ],
           ),
         );

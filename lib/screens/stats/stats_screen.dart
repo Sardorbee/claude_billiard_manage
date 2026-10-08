@@ -4,6 +4,7 @@ import 'expenses_screen.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../blocs/blocs.dart';
+import '../../models/models.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/widgets.dart';
 
@@ -440,37 +441,168 @@ class _RankRow extends StatelessWidget {
 }
 
 class _SessionHistoryRow extends StatelessWidget {
-  final dynamic session;
+  final SessionModel session;
   const _SessionHistoryRow({required this.session});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
         color: AppTheme.surface,
-        border: Border.all(color: AppTheme.border),
-        borderRadius: BorderRadius.circular(4),
+        shape: RoundedRectangleBorder(
+          side: const BorderSide(color: AppTheme.border),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => showModalBottomSheet(
+            context: context,
+            backgroundColor: AppTheme.surface,
+            isScrollControlled: true,
+            builder: (_) => SessionHistorySheet(session: session),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(session.isCounterSale ? 'Kassa savdosi' : session.tableName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text(formatDate(session.startedAt), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                  ],
+                )),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(formatCurrency(session.paidTotal), style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
+                    Text(formatTime(session.elapsedSeconds.toInt()), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.chevron_right, size: 18, color: AppTheme.textMuted),
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Row(
+    );
+  }
+}
+
+// ─── Session history: everything recorded about one closed session ─────────
+
+class SessionHistorySheet extends StatelessWidget {
+  final SessionModel session;
+  const SessionHistorySheet({super.key, required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = session;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (context, controller) => ListView(
+        controller: controller,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: AppTheme.border, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('Seans tarixi', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+          const SizedBox(height: 4),
+          Row(
             children: [
-              Text(session.tableName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              Text(formatDate(session.startedAt), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
-            ],
-          )),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(formatCurrency(session.paidTotal), style: const TextStyle(color: AppTheme.green, fontWeight: FontWeight.w800, fontSize: 15)),
-              Text(formatTime(session.elapsedSeconds.toInt()), style: const TextStyle(color: AppTheme.textMuted, fontSize: 11)),
+              Expanded(
+                child: Text(s.isCounterSale ? 'Kassa savdosi' : s.tableName,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              ),
+              if (s.status == 'voided')
+                const Text('BEKOR QILINGAN',
+                    style: TextStyle(color: AppTheme.red, fontSize: 11, fontWeight: FontWeight.w700)),
             ],
           ),
+
+          SectionHeader('Vaqt'),
+          _InfoRow('Boshlandi', formatDate(s.startedAt)),
+          if (s.endedAt != null) _InfoRow('Tugadi', formatDate(s.endedAt!)),
+          if (!s.isCounterSale) ...[
+            _InfoRow('Davomiyligi', formatTime(s.elapsedSeconds.toInt())),
+            if (s.totalPausedSeconds > 0)
+              _InfoRow('Pauzada', formatTime(s.totalPausedSeconds)),
+            if (s.plannedEndAt != null)
+              _InfoRow('Belgilangan vaqt', durationLabel(s.plannedEndAt!.difference(s.startedAt).inMinutes)),
+            _InfoRow('Mehmonlar', '${s.guestCount}'),
+            _InfoRow('Soatlik narx', formatCurrency(s.hourlyRate)),
+          ],
+
+          if (s.splits.isNotEmpty) ...[
+            SectionHeader("Bo'linishlar (${s.splits.length})"),
+            ...s.splits.asMap().entries.map((e) => _InfoRow(
+                  '${e.key + 1}. ${e.value.payerName} · ${formatTime(e.value.durationSeconds)}',
+                  formatCurrency(e.value.total),
+                )),
+          ],
+
+          if (s.orderItems.isNotEmpty) ...[
+            SectionHeader('Mahsulotlar'),
+            ...s.orderItems.map((i) => _InfoRow(
+                  '${i.name}  ×${i.quantity}',
+                  formatCurrency(i.subtotal),
+                )),
+          ],
+
+          SectionHeader("To'lov"),
+          if (!s.isCounterSale) _InfoRow('Stol vaqti', formatCurrency(s.timeCharge)),
+          if (s.orderItems.isNotEmpty) _InfoRow('Mahsulotlar', formatCurrency(s.fbTotal)),
+          if (s.discount > 0)
+            _InfoRow('Chegirma (${s.discount.toStringAsFixed(0)}%)', '-${formatCurrency(s.discountAmount)}'),
+          if (s.paymentMethod != null)
+            _InfoRow("To'lov turi", paymentLabel(s.paymentMethod!)),
+          if (s.debtorName != null && s.debtorName!.isNotEmpty)
+            _InfoRow('Qarzdor', s.debtorName!),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Jami', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              Text(formatCurrency(s.paidTotal),
+                  style: const TextStyle(color: AppTheme.green, fontSize: 18, fontWeight: FontWeight.w800)),
+            ],
+          ),
+
+          if (s.notes != null && s.notes!.trim().isNotEmpty) ...[
+            SectionHeader('Izoh'),
+            Text(s.notes!, style: const TextStyle(fontSize: 13)),
+          ],
         ],
       ),
     );
   }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label, value;
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 13))),
+        const SizedBox(width: 12),
+        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      ],
+    ),
+  );
 }
