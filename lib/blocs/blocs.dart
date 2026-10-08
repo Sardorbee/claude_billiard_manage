@@ -86,7 +86,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
         emit(const AuthError('Foydalanuvchi topilmadi'));
       }
     } catch (e) {
-      emit(AuthError(e.toString().replaceAll('Exception:', '').trim()));
+      emit(AuthError(authErrorText(e)));
     }
   }
 
@@ -529,8 +529,10 @@ class SessionBloc extends Bloc<SessionEvent, SessionState> {
 
 // Total wall-clock seconds since session started (always ticking)
   int _computeTotalElapsed() {
-    if (_liveData == null || _session == null) return 0;
-    final startedAt = _liveData!['startedAt'] as int? ??
+    if (_session == null) return 0;
+    // Without live data yet, the session's own start time still gives the
+    // right elapsed time, so a session never bills from zero.
+    final startedAt = _liveData?['startedAt'] as int? ??
         _session!.startedAt.millisecondsSinceEpoch;
     final now = DateTime.now().millisecondsSinceEpoch;
     final result = ((now - startedAt) / 1000).floor();

@@ -165,8 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
           SnackBar(content: Text('Parolni tiklash havolasi $email ga yuborildi')));
     } on FirebaseAuthException catch (e) {
       messenger.showSnackBar(SnackBar(
-          content: Text(e.message ?? "Havolani yuborib bo'lmadi"),
-          backgroundColor: AppTheme.red));
+          content: Text(authErrorText(e)), backgroundColor: AppTheme.red));
     }
   }
 

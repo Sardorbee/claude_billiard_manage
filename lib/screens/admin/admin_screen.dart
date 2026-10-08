@@ -482,7 +482,8 @@ class _MenuTabState extends State<_MenuTab> {
                           child: Text("Menyuda hali mahsulot yo'q",
                               style: TextStyle(color: AppTheme.textMuted))),
                     ),
-                  ...items.map((item) => _AdminMenuRow(item: item)),
+                  ...items.map((item) =>
+                      _AdminMenuRow(item: item, categories: categories)),
                 ],
               ),
             );
@@ -687,7 +688,8 @@ Future<MenuImage?> _pickMenuImage(BuildContext context) async {
 
 class _AdminMenuRow extends StatefulWidget {
   final MenuItem item;
-  const _AdminMenuRow({required this.item});
+  final List<String> categories;
+  const _AdminMenuRow({required this.item, required this.categories});
 
   @override
   State<_AdminMenuRow> createState() => _AdminMenuRowState();
@@ -788,6 +790,15 @@ class _AdminMenuRowState extends State<_AdminMenuRow> {
           PopupMenuButton<String>(
             color: AppTheme.surface2,
             onSelected: (v) {
+              if (v == 'edit') {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: AppTheme.surface,
+                  isScrollControlled: true,
+                  builder: (_) => _AddMenuItemSheet(
+                      categories: widget.categories, item: item),
+                );
+              }
               if (v == 'image') _changeImage();
               if (v == 'removeImage') {
                 final authState = context.read<AuthBloc>().state;
@@ -808,6 +819,7 @@ class _AdminMenuRowState extends State<_AdminMenuRow> {
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Tahrirlash')),
               PopupMenuItem(
                   value: 'image',
                   child: Text(item.imageUrl == null
@@ -827,18 +839,30 @@ class _AdminMenuRowState extends State<_AdminMenuRow> {
   }
 }
 
+// Adds a menu item, or edits [item] when one is given.
 class _AddMenuItemSheet extends StatefulWidget {
   final List<String> categories;
-  const _AddMenuItemSheet({required this.categories});
+  final MenuItem? item;
+  const _AddMenuItemSheet({required this.categories, this.item});
   @override
   State<_AddMenuItemSheet> createState() => _AddMenuItemSheetState();
 }
 
 class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
-  final _nameCtrl = TextEditingController();
-  final _priceCtrl = TextEditingController();
-  late String _category = widget.categories.first;
+  late final _nameCtrl = TextEditingController(text: widget.item?.name);
+  late final _priceCtrl = TextEditingController(
+      text: widget.item == null
+          ? null
+          : widget.item!.price
+              .toStringAsFixed(widget.item!.price % 1 == 0 ? 0 : 2));
+  late String _category = widget.item?.category ?? widget.categories.first;
   MenuImage? _image;
+
+  // An item can still carry a category that was since removed from the
+  // list; keep it selectable so the dropdown has a matching value.
+  List<String> get _categories => widget.categories.contains(_category)
+      ? widget.categories
+      : [...widget.categories, _category];
   bool _saving = false;
 
   Future<void> _pick() async {
@@ -857,17 +881,31 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
     try {
       // Saved directly rather than through the bloc so the sheet can wait
       // for the photo upload and report a failure.
-      await context.read<MenuRepository>().addItem(
-            user.venueId,
-            MenuItem(
-              id: '',
-              name: name,
-              price: double.tryParse(_priceCtrl.text) ?? 0,
-              category: _category,
-              venueId: user.venueId,
-            ),
-            image: _image,
-          );
+      final repo = context.read<MenuRepository>();
+      final price = double.tryParse(
+              _priceCtrl.text.replaceAll(RegExp(r'[\s,]'), '')) ??
+          0;
+      final existing = widget.item;
+      if (existing == null) {
+        await repo.addItem(
+          user.venueId,
+          MenuItem(
+            id: '',
+            name: name,
+            price: price,
+            category: _category,
+            venueId: user.venueId,
+          ),
+          image: _image,
+        );
+      } else {
+        final updated =
+            existing.copyWith(name: name, price: price, category: _category);
+        await repo.updateItem(user.venueId, updated, previous: existing);
+        if (_image != null) {
+          await repo.setItemImage(user.venueId, updated, _image!);
+        }
+      }
       navigator.pop();
     } catch (e) {
       if (mounted) setState(() => _saving = false);
@@ -885,8 +923,9 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Mahsulot qo'shish",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(widget.item == null ? "Mahsulot qo'shish" : 'Mahsulotni tahrirlash',
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 24),
           Row(
             children: [
@@ -901,16 +940,22 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
                     border: Border.all(color: AppTheme.border),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: _image == null
-                      ? const Icon(Icons.add_a_photo_outlined,
-                          color: AppTheme.textMuted)
-                      : Image.memory(_image!.bytes, fit: BoxFit.cover),
+                  child: _image != null
+                      ? Image.memory(_image!.bytes, fit: BoxFit.cover)
+                      : widget.item?.imageUrl != null
+                          ? Image.network(widget.item!.imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.broken_image_outlined,
+                                  color: AppTheme.textMuted))
+                          : const Icon(Icons.add_a_photo_outlined,
+                              color: AppTheme.textMuted),
                 ),
               ),
               const SizedBox(width: 12),
               TextButton(
                 onPressed: _pick,
-                child: Text(_image == null
+                child: Text(_image == null && widget.item?.imageUrl == null
                     ? "Rasm qo'shish (ixtiyoriy)"
                     : 'Rasmni almashtirish'),
               ),
@@ -933,7 +978,7 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
             value: _category,
             dropdownColor: AppTheme.surface2,
             decoration: const InputDecoration(labelText: 'Kategoriya'),
-            items: widget.categories
+            items: _categories
                 .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                 .toList(),
             onChanged: (c) => setState(() => _category = c!),
@@ -949,7 +994,7 @@ class _AddMenuItemSheetState extends State<_AddMenuItemSheet> {
                       width: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: AppTheme.bg))
-                  : const Text("QO'SHISH"),
+                  : Text(widget.item == null ? "QO'SHISH" : 'SAQLASH'),
             ),
           ),
         ],
@@ -1240,6 +1285,11 @@ class _ActivityTabState extends State<_ActivityTab> {
             "Kun tugash vaqti o'zgardi",
             Icons.schedule,
             AppTheme.textSecondary
+          ),
+        ActivityType.menuItemPriceChanged => (
+            "Mahsulot narxi o'zgardi",
+            Icons.price_change_outlined,
+            AppTheme.amber
           ),
         ActivityType.expenseDeleted => (
             "Xarajat o'chirildi",

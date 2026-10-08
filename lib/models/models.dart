@@ -917,6 +917,7 @@ abstract class ActivityType {
   static const tableDeleted = 'tableDeleted';
   static const menuItemAdded = 'menuItemAdded';
   static const menuItemDeleted = 'menuItemDeleted';
+  static const menuItemPriceChanged = 'menuItemPriceChanged';
   static const debtAdded = 'debtAdded';
   static const debtWrittenOff = 'debtWrittenOff';
   static const staffCreated = 'staffCreated';

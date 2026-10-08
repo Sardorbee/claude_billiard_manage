@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -73,12 +75,42 @@ class ActivityRepository {
 
 // ─── AUTH REPOSITORY ─────────────────────────────────────────────────────────
 
+// Firebase reports sign-in problems in English; this is what the user sees.
+String authErrorText(Object error) {
+  final code = error is FirebaseException ? error.code : '';
+  switch (code) {
+    case 'invalid-credential':
+    case 'wrong-password':
+    case 'user-not-found':
+    case 'invalid-email':
+    case 'missing-password':
+      return "Email yoki parol noto'g'ri";
+    case 'user-disabled':
+      return "Bu hisob o'chirib qo'yilgan";
+    case 'too-many-requests':
+      return "Juda ko'p urinish. Birozdan keyin qayta urinib ko'ring";
+    case 'network-request-failed':
+    case 'unavailable':
+      return "Internet aloqasi yo'q";
+    case 'not-found':
+    case 'permission-denied':
+      // Signed in, but there is no staff profile for this account.
+      return 'Bu hisob uchun xodim profili topilmadi';
+    default:
+      return 'Xatolik yuz berdi${code.isEmpty ? '' : ' ($code)'}';
+  }
+}
+
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final ActivityRepository _activity;
 
   AuthRepository(this._activity);
+
+  // Set in emulator mode, so the throwaway app used to create staff
+  // accounts talks to the auth emulator too instead of the live project.
+  static ({String host, int port})? authEmulator;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
@@ -116,6 +148,10 @@ class AuthRepository {
     );
     try {
       final secondaryAuth = FirebaseAuth.instanceFor(app: secondary);
+      final emulator = authEmulator;
+      if (emulator != null) {
+        await secondaryAuth.useAuthEmulator(emulator.host, emulator.port);
+      }
       final cred = await secondaryAuth.createUserWithEmailAndPassword(email: email, password: password);
       final user = AppUser(
         uid: cred.user!.uid,
@@ -201,6 +237,30 @@ class TableRepository {
   }
 }
 
+// The latest live-timer state of every table in a venue, kept current by a
+// single database listener.
+class _LiveFeed {
+  final String venueId;
+  _LiveFeed(this.venueId);
+
+  StreamSubscription? sub;
+  bool loaded = false;
+  Map<String, Map<String, dynamic>> latest = const {};
+  final changes =
+      StreamController<Map<String, Map<String, dynamic>>>.broadcast();
+
+  void publish(Map<String, Map<String, dynamic>> all) {
+    latest = all;
+    loaded = true;
+    if (!changes.isClosed) changes.add(all);
+  }
+
+  void close() {
+    sub?.cancel();
+    changes.close();
+  }
+}
+
 // ─── SESSION REPOSITORY ───────────────────────────────────────────────────────
 
 class SessionRepository {
@@ -223,11 +283,51 @@ class SessionRepository {
   DatabaseReference _liveRef(String venueId, String tableId) =>
       _rtdb.ref('venues/$venueId/sessions/$tableId');
 
-  Stream<Map<String, dynamic>?> watchLiveSession(String venueId, String tableId) {
-    return _liveRef(venueId, tableId).onValue.map((event) {
-      if (!event.snapshot.exists) return null;
-      return Map<String, dynamic>.from(event.snapshot.value as Map);
+  // All of a venue's live timers come from ONE database listener that stays
+  // open while someone is signed in. Screens used to open and close their
+  // own listener per table; after leaving the floor and coming back, the
+  // re-opened listeners delivered nothing and every timer read 00:00:00.
+  _LiveFeed? _feed;
+
+  _LiveFeed _feedFor(String venueId) {
+    final existing = _feed;
+    if (existing != null && existing.venueId == venueId) return existing;
+    existing?.close();
+    final feed = _LiveFeed(venueId);
+    feed.sub = _rtdb.ref('venues/$venueId/sessions').onValue.listen((event) {
+      final value = event.snapshot.value;
+      feed.publish(value is Map
+          ? value.map((tableId, live) => MapEntry(
+              tableId as String, Map<String, dynamic>.from(live as Map)))
+          : const {});
+    }, onError: (_) {
+      // Signing out ends the stream; a fresh feed starts at next sign-in.
+      if (identical(_feed, feed)) _feed = null;
+      feed.close();
     });
+    return _feed = feed;
+  }
+
+  // Call at sign-out.
+  void stopLive() {
+    _feed?.close();
+    _feed = null;
+  }
+
+  // The live timer state of one table. Emits the current value straight
+  // away when it is already known.
+  Stream<Map<String, dynamic>?> watchLiveSession(String venueId, String tableId) {
+    final feed = _feedFor(venueId);
+    late final StreamController<Map<String, dynamic>?> out;
+    StreamSubscription? sub;
+    out = StreamController(
+      onListen: () {
+        if (feed.loaded) out.add(feed.latest[tableId]);
+        sub = feed.changes.stream.listen((all) => out.add(all[tableId]));
+      },
+      onCancel: () => sub?.cancel(),
+    );
+    return out.stream;
   }
 
   Future<void> addSplit(String venueId, String sessionId, SessionSplit split) async {
@@ -648,9 +748,16 @@ class MenuRepository {
     return newItem;
   }
 
-  Future<void> updateItem(String venueId, MenuItem item) =>
-      _db.collection('venues').doc(venueId).collection('menu').doc(item.id)
-          .update(item.toFirestore());
+  // Pass [previous] when editing so a change of price is logged.
+  Future<void> updateItem(String venueId, MenuItem item,
+      {MenuItem? previous}) async {
+    await _db.collection('venues').doc(venueId).collection('menu').doc(item.id)
+        .update(item.toFirestore());
+    if (previous != null && previous.price != item.price) {
+      await _activity.log(venueId, ActivityType.menuItemPriceChanged, item.name,
+          detail: '${_money(previous.price)} → ${_money(item.price)}');
+    }
+  }
 
   Future<void> deleteItem(String venueId, MenuItem item) async {
     await _db.collection('venues').doc(venueId).collection('menu').doc(item.id).delete();

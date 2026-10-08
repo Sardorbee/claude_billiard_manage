@@ -26,6 +26,7 @@ void main() async {
   // emulators (see firebase.json) instead of the live project.
   if (useEmulators) {
     await FirebaseAuth.instance.useAuthEmulator('localhost', 9099);
+    AuthRepository.authEmulator = (host: 'localhost', port: 9099);
     // On web a remembered sign-in makes the SDK contact the live project
     // before the line above runs, and the switch to the emulator is then
     // silently ignored. Not remembering sign-ins in emulator mode avoids it.
@@ -153,7 +154,10 @@ class _BlocProvidersState extends State<_BlocProviders> {
   void _onAuthChange(BuildContext context, AuthState state) {
     context.read<ActivityRepository>().actor =
         state is AuthAuthenticated ? state.user : null;
-    if (state is AuthUnauthenticated) _notifier.clear();
+    if (state is AuthUnauthenticated) {
+      _notifier.clear();
+      widget.sessionRepo.stopLive();
+    }
     if (state is AuthAuthenticated) {
       final user = state.user;
       // Ask for notification permission once someone is signed in, then
